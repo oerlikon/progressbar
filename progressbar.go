@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math"
 	"os"
 	"regexp"
@@ -50,6 +49,7 @@ type state struct {
 	maxLineWidth int
 	currentBytes float64
 	finished     bool
+	stopped      bool
 
 	rendered string
 }
@@ -296,7 +296,6 @@ func getBasicState() state {
 	now := time.Now()
 	return state{
 		startTime:   now,
-		lastShown:   now,
 		counterTime: now,
 	}
 }
@@ -345,7 +344,7 @@ func DefaultBytesSilent(maxBytes int64, description ...string) *ProgressBar {
 	bar := NewOptions64(
 		maxBytes,
 		OptionSetDescription(desc),
-		OptionSetWriter(ioutil.Discard),
+		OptionSetWriter(io.Discard),
 		OptionShowBytes(true),
 		OptionSetWidth(10),
 		OptionThrottle(65*time.Millisecond),
@@ -394,7 +393,7 @@ func DefaultSilent(max int64, description ...string) *ProgressBar {
 	bar := NewOptions64(
 		max,
 		OptionSetDescription(desc),
-		OptionSetWriter(ioutil.Discard),
+		OptionSetWriter(io.Discard),
 		OptionSetWidth(10),
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
@@ -435,6 +434,18 @@ func (p *ProgressBar) Finish() error {
 	p.state.currentNum = p.config.max
 	p.lock.Unlock()
 	return p.Add(0)
+}
+
+// Stop stops the progress bar at current state.
+func (p *ProgressBar) Stop() error {
+	if p.config.invisible {
+		return nil
+	}
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	p.state.stopped = true
+	p.state.lastShown = time.Time{}
+	return p.render()
 }
 
 // Add will add the specified amount to the progressbar
@@ -549,7 +560,7 @@ func (p *ProgressBar) ChangeMax64(newMax int64) {
 	p.Add(0) // re-render
 }
 
-// IsFinished returns true if progreess bar is completed
+// IsFinished returns true if progress bar is completed
 func (p *ProgressBar) IsFinished() bool {
 	return p.state.finished
 }
@@ -574,7 +585,7 @@ func (p *ProgressBar) render() error {
 	}
 
 	// check if the progress bar is finished
-	if !p.state.finished && p.state.currentNum >= p.config.max {
+	if !p.state.finished && (p.state.currentNum >= p.config.max || p.state.stopped) {
 		p.state.finished = true
 		if !p.config.clearOnFinish {
 			renderProgressBar(p.config, &p.state)
