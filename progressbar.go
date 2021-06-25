@@ -287,6 +287,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 
 	if b.config.renderWithBlankState {
 		b.RenderBlank()
+	} else {
+		b.state.lastShown = b.state.startTime
 	}
 
 	return &b
@@ -416,6 +418,7 @@ func (p *ProgressBar) RenderBlank() error {
 	if p.config.invisible {
 		return nil
 	}
+	p.state.lastShown = time.Time{}
 	return p.render()
 }
 
@@ -432,8 +435,9 @@ func (p *ProgressBar) Reset() {
 func (p *ProgressBar) Finish() error {
 	p.lock.Lock()
 	p.state.currentNum = p.config.max
+	p.state.lastShown = time.Time{}
 	p.lock.Unlock()
-	return p.Add(0)
+	return p.Add(0) // re-render
 }
 
 // Stop stops the progress bar at current state.
@@ -442,10 +446,10 @@ func (p *ProgressBar) Stop() error {
 		return nil
 	}
 	p.lock.Lock()
-	defer p.lock.Unlock()
 	p.state.stopped = true
 	p.state.lastShown = time.Time{}
-	return p.render()
+	p.lock.Unlock()
+	return p.Add(0) // re-render
 }
 
 // Add will add the specified amount to the progressbar
@@ -491,7 +495,8 @@ func (p *ProgressBar) Add64(num int64) error {
 	// reset the countdown timer every second to take rolling average
 	p.state.counterNumSinceLast += num
 	if time.Since(p.state.counterTime).Seconds() > 0.5 {
-		p.state.counterLastTenRates = append(p.state.counterLastTenRates, float64(p.state.counterNumSinceLast)/time.Since(p.state.counterTime).Seconds())
+		rate := float64(p.state.counterNumSinceLast) / time.Since(p.state.counterTime).Seconds()
+		p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
 		if len(p.state.counterLastTenRates) > 10 {
 			p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
 		}
@@ -632,7 +637,7 @@ func (p *ProgressBar) State() State {
 	if p.state.currentNum > 0 {
 		s.SecondsLeft = s.SecondsSince / float64(p.state.currentNum) * (float64(p.config.max) - float64(p.state.currentNum))
 	}
-	s.KBsPerSecond = float64(p.state.currentBytes) / 1024.0 / s.SecondsSince
+	s.KBsPerSecond = float64(p.state.currentBytes) / 1000 / s.SecondsSince
 	return s
 }
 
@@ -687,9 +692,11 @@ func renderProgressBar(c config, s *state) (int, error) {
 			if c.showBytes {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				if currentSuffix == c.maxHumanizedSuffix {
-					bytesString += fmt.Sprintf("%s/%s%s", currentHumanize, c.maxHumanized, c.maxHumanizedSuffix)
+					bytesString += fmt.Sprintf("%s/%s%s",
+						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix)
 				} else {
-					bytesString += fmt.Sprintf("%s%s/%s%s", currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix)
+					bytesString += fmt.Sprintf("%s%s/%s%s",
+						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix)
 
 				}
 			} else {
@@ -700,7 +707,11 @@ func renderProgressBar(c config, s *state) (int, error) {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				bytesString += fmt.Sprintf("%s%s", currentHumanize, currentSuffix)
 			} else {
-				bytesString += fmt.Sprintf("%.0f/%s", s.currentBytes, "-")
+				if !s.finished {
+					bytesString += fmt.Sprintf("%.0f/%s", s.currentBytes, "?")
+				} else {
+					bytesString += fmt.Sprintf("%.0f/%.0f", s.currentBytes, s.currentBytes)
+				}
 			}
 		}
 	}
@@ -712,9 +723,9 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else {
 			bytesString += ", "
 		}
-		kbPerSecond := averageRate / 1024.0
-		if kbPerSecond > 1024.0 {
-			bytesString += fmt.Sprintf("%0.3f MB/s", kbPerSecond/1024.0)
+		kbPerSecond := averageRate / 1000
+		if kbPerSecond > 1000 {
+			bytesString += fmt.Sprintf("%0.3f MB/s", kbPerSecond/1000)
 		} else if kbPerSecond > 0 {
 			bytesString += fmt.Sprintf("%0.3f kB/s", kbPerSecond)
 		}
@@ -779,11 +790,18 @@ func renderProgressBar(c config, s *state) (int, error) {
 		repeatAmount = 0
 	}
 	if c.ignoreLength {
-		str = fmt.Sprintf("\r%s %s %s ",
-			spinners[c.spinnerType][int(math.Round(math.Mod(float64(time.Since(s.startTime).Milliseconds()/100), float64(len(spinners[c.spinnerType])))))],
-			c.description,
-			bytesString,
-		)
+		if !s.finished {
+			dt, st := time.Since(s.startTime).Milliseconds()/100, c.spinnerType
+			str = fmt.Sprintf("\r %s %s%s ",
+				spinners[st][int(math.Round(math.Mod(float64(dt), float64(len(spinners[st])))))],
+				c.description,
+				bytesString)
+		} else {
+			str = fmt.Sprintf("\r%4d%% %s%s ",
+				100,
+				c.description,
+				bytesString)
+		}
 	} else if leftBrac == "" {
 		str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s ",
 			c.description,
@@ -792,21 +810,19 @@ func renderProgressBar(c config, s *state) (int, error) {
 			saucer,
 			strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 			c.theme.BarEnd,
-			bytesString,
-		)
+			bytesString)
 	} else {
 		if s.currentPercent == 100 {
-			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s",
+			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s ",
 				c.description,
 				s.currentPercent,
 				c.theme.BarStart,
 				saucer,
 				strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 				c.theme.BarEnd,
-				bytesString,
-			)
+				bytesString)
 		} else {
-			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s [%s:%s]",
+			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s [%s:%s] ",
 				c.description,
 				s.currentPercent,
 				c.theme.BarStart,
@@ -815,8 +831,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				c.theme.BarEnd,
 				bytesString,
 				leftBrac,
-				rightBrac,
-			)
+				rightBrac)
 		}
 	}
 
@@ -917,8 +932,8 @@ func average(xs []float64) float64 {
 }
 
 func humanizeBytes(s float64) (string, string) {
+	const base = 1000
 	sizes := []string{" B", " kB", " MB", " GB", " TB", " PB", " EB"}
-	base := 1024.0
 	if s < 10 {
 		return fmt.Sprintf("%2.0f", s), "B"
 	}
@@ -929,7 +944,6 @@ func humanizeBytes(s float64) (string, string) {
 	if val < 10 {
 		f = "%.1f"
 	}
-
 	return fmt.Sprintf(f, val), suffix
 }
 

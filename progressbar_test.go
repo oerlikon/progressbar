@@ -49,7 +49,6 @@ func ExampleProgressBar_Set64() {
 
 func ExampleProgressBar_basic() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false))
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	// Output:
@@ -58,7 +57,6 @@ func ExampleProgressBar_basic() {
 
 func ExampleProgressBar_invisible() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false), OptionSetVisibility(false))
-	bar.Reset()
 	bar.RenderBlank()
 	fmt.Println("hello, world")
 	time.Sleep(1 * time.Second)
@@ -69,7 +67,6 @@ func ExampleProgressBar_invisible() {
 
 func ExampleOptionThrottle() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false), OptionThrottle(100*time.Millisecond))
-	bar.Reset()
 	bar.Add(5)
 	time.Sleep(150 * time.Millisecond)
 	bar.Add(5)
@@ -80,7 +77,6 @@ func ExampleOptionThrottle() {
 
 func ExampleOptionClearOnFinish() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false), OptionClearOnFinish())
-	bar.Reset()
 	bar.Finish()
 	fmt.Println("Finished")
 	// Output:
@@ -104,7 +100,6 @@ func Example_xOutOfY() {
 
 func ExampleOptionShowIts_count() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	// Output:
@@ -113,7 +108,6 @@ func ExampleOptionShowIts_count() {
 
 func ExampleOptionShowIts() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionSetPredictTime(false))
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	// Output:
@@ -159,14 +153,12 @@ func ExampleIgnoreLength_WithIteration() {
 	bar := NewOptions(-1,
 		OptionSetWidth(10),
 		OptionShowIts(),
-		OptionShowCount(),
-	)
-	bar.Reset()
+		OptionShowCount())
 	time.Sleep(1 * time.Second)
 	bar.Add(5)
 
 	// Output:
-	// -  (5/-, 5 it/s)
+	// - (5/?, 5 it/s)
 }
 
 func TestSpinnerType(t *testing.T) {
@@ -175,9 +167,7 @@ func TestSpinnerType(t *testing.T) {
 		OptionSetDescription("indeterminate spinner"),
 		OptionShowIts(),
 		OptionShowCount(),
-		OptionSpinnerType(9),
-	)
-	bar.Reset()
+		OptionSpinnerType(9))
 	for i := 0; i < 10; i++ {
 		time.Sleep(120 * time.Millisecond)
 		bar.Add(1)
@@ -218,25 +208,20 @@ func ExampleIgnoreLength_WithSpeed() {
 	/*
 		IgnoreLength test with iterations and count
 	*/
-	bar := NewOptions(-1,
-		OptionSetWidth(10),
-		OptionShowBytes(true),
-	)
+	bar := NewOptions(-1, OptionSetWidth(10), OptionShowBytes(true))
 
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	// since 10 is the width and we don't know the max bytes
 	// it will do a infinite scrolling.
 	bar.Add(11)
 
 	// Output:
-	// -  (0.011 kB/s)
+	// - (0.011 kB/s)
 }
 
 func TestBarSlowAdd(t *testing.T) {
 	buf := strings.Builder{}
 	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionSetWriter(&buf))
-	bar.Reset()
 	time.Sleep(3 * time.Second)
 	bar.Add(1)
 	if !strings.Contains(buf.String(), "1%") {
@@ -259,14 +244,14 @@ func TestBarSmallBytes(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		bar.Add(1000)
 	}
-	if !strings.Contains(buf.String(), "8.8 kB/95 MB") {
+	if !strings.Contains(buf.String(), "9.0 kB/100 MB") {
 		t.Errorf("wrong string: %s", buf.String())
 	}
 	for i := 1; i < 10; i++ {
 		time.Sleep(10 * time.Millisecond)
 		bar.Add(1000000)
 	}
-	if !strings.Contains(buf.String(), "8.6/95 MB") {
+	if !strings.Contains(buf.String(), "9.0/100 MB") {
 		t.Errorf("wrong string: %s", buf.String())
 	}
 }
@@ -284,7 +269,6 @@ func TestBar(t *testing.T) {
 
 func TestState(t *testing.T) {
 	bar := NewOptions(100, OptionSetWidth(10))
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	s := bar.State()
@@ -325,12 +309,10 @@ func TestBasicSets(t *testing.T) {
 
 func TestOptionSetTheme(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(
-		10,
+	bar := NewOptions(10,
 		OptionSetTheme(Theme{Saucer: "#", SaucerPadding: "-", BarStart: ">", BarEnd: "<"}),
 		OptionSetWidth(10),
-		OptionSetWriter(&buf),
-	)
+		OptionSetWriter(&buf))
 	bar.Add(5)
 	result := strings.TrimSpace(buf.String())
 	expect := "50% >#####-----<  [0s:0s]"
@@ -344,12 +326,10 @@ func TestOptionSetTheme(t *testing.T) {
 // time in seconds is specified.
 func TestOptionSetPredictTime(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(
-		10,
+	bar := NewOptions(10,
 		OptionSetPredictTime(false),
 		OptionSetWidth(10),
-		OptionSetWriter(&buf),
-	)
+		OptionSetWriter(&buf))
 
 	_ = bar.Add(2)
 	result := strings.TrimSpace(buf.String())
@@ -373,11 +353,7 @@ func TestOptionSetPredictTime(t *testing.T) {
 }
 
 func TestIgnoreLength(t *testing.T) {
-	bar := NewOptions(
-		-1,
-		OptionSetWidth(100),
-	)
-	bar.Reset()
+	bar := NewOptions(-1, OptionSetWidth(100))
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 
@@ -527,7 +503,6 @@ func md5sum(r io.Reader) (string, error) {
 
 func ExampleProgressBar_Describe() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false))
-	bar.Reset()
 	time.Sleep(1 * time.Second)
 	bar.Describe("performing axial adjustements")
 	bar.Add(10)
