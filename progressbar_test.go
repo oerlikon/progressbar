@@ -505,14 +505,14 @@ func TestProgressBar_Describe(t *testing.T) {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false), OptionSetWriter(&buf))
 	bar.Describe("performing axial adjustments")
 	bar.Add(10)
-	expected := `"\r\r` +
-		`\rperforming axial adjustments   0% |          |  [0s:0s] ` +
-		`\r                                                        \r` +
-		`\rperforming axial adjustments  10% |\u2588         |  [0s:0s] "`
-	if s := strconv.QuoteToASCII(buf.String()); s != expected {
+	expected := "\r\r" +
+		"\rperforming axial adjustments   0% |          |  [0s:0s] " +
+		"\r                                                        \r" +
+		"\rperforming axial adjustments  10% |█         |  [0s:0s] "
+	if s := buf.String(); s != expected {
 		fmt.Println()
-		fmt.Println("Produced:", s)
-		fmt.Println("Expected:", expected)
+		fmt.Println("Produced:", strconv.QuoteToASCII(s))
+		fmt.Println("Expected:", strconv.QuoteToASCII(expected))
 		t.Errorf("Expected output mismatch")
 	}
 }
