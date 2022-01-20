@@ -531,6 +531,7 @@ func (p *ProgressBar) Clear() error {
 // can be changed on the fly (as for a slow running process).
 func (p *ProgressBar) Describe(description string) {
 	p.config.description = description
+	p.RenderBlank()
 }
 
 // New64 returns a new ProgressBar
@@ -562,6 +563,11 @@ func (p *ProgressBar) ChangeMax(newMax int) {
 // to avoid casting
 func (p *ProgressBar) ChangeMax64(newMax int64) {
 	p.config.max = newMax
+
+	if p.config.showBytes {
+		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max))
+	}
+
 	p.Add(0) // re-render
 }
 
@@ -697,7 +703,6 @@ func renderProgressBar(c config, s *state) (int, error) {
 				} else {
 					bytesString += fmt.Sprintf("%s%s/%s%s",
 						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix)
-
 				}
 			} else {
 				bytesString += fmt.Sprintf("%.0f/%d", s.currentBytes, c.max)
@@ -753,7 +758,11 @@ func renderProgressBar(c config, s *state) (int, error) {
 	// show time prediction in "current/total" seconds format
 	if c.predictTime {
 		leftBrac = (time.Duration(time.Since(s.startTime).Seconds()) * time.Second).String()
-		rightBrac = (time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second).String()
+		rightBracNum := time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second
+		if rightBracNum.Seconds() < 0 {
+			rightBracNum = 0 * time.Second
+		}
+		rightBrac = rightBracNum.String()
 	}
 
 	if c.fullWidth && !c.ignoreLength {
@@ -774,6 +783,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else {
 			saucer = strings.Repeat(c.theme.Saucer, s.currentSaucerSize-1)
 		}
+
 		saucerHead := c.theme.SaucerHead
 		if saucerHead == "" || s.currentSaucerSize == c.width {
 			// use the saucer for the saucer head if it hasn't been set
