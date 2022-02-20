@@ -106,14 +106,6 @@ func Example_xOutOfY() {
 	}
 }
 
-func ExampleOptionShowIts_count() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
-	time.Sleep(1 * time.Second)
-	bar.Add(10)
-	// Output:
-	// 10% |█         | (10/100, 10 it/s) [1s:9s]
-}
-
 func ExampleOptionShowIts() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionSetPredictTime(false))
 	time.Sleep(1 * time.Second)
@@ -122,11 +114,19 @@ func ExampleOptionShowIts() {
 	// 10% |█         | (10 it/s)
 }
 
-func ExampleOptionShowCountBigNumber() {
+func ExampleOptionShowCount() {
 	bar := NewOptions(10000, OptionSetWidth(10), OptionShowCount(), OptionSetPredictTime(false))
-	bar.Add(1)
+	bar.Add(10)
 	// Output:
-	// 0% |          | (1/10000)
+	// 0% |          | (10/10000)
+}
+
+func ExampleOptionShowCount_withIts() {
+	bar := NewOptions(100, OptionSetWidth(10), OptionShowCount(), OptionShowIts())
+	time.Sleep(1 * time.Second)
+	bar.Add(10)
+	// Output:
+	// 10% |█         | (10/100, 10 it/s) [1s:9s]
 }
 
 func ExampleOptionSetPredictTime() {
@@ -146,7 +146,7 @@ func ExampleDefault() {
 	//
 }
 
-func ExampleOptionChangeMax() {
+func ExampleProgressBar_ChangeMax() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetPredictTime(false))
 	bar.ChangeMax(50)
 	bar.Add(50)
@@ -154,10 +154,7 @@ func ExampleOptionChangeMax() {
 	// 100% |██████████|
 }
 
-func ExampleIgnoreLength_WithIteration() {
-	/*
-		IgnoreLength test with iteration count and iteration rate
-	*/
+func ExampleOptionShowIts_spinner() {
 	bar := NewOptions(-1, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
 	time.Sleep(1 * time.Second)
 	bar.Add(5)
@@ -207,10 +204,7 @@ func Test_IsFinished(t *testing.T) {
 	}
 }
 
-func ExampleIgnoreLength_WithSpeed() {
-	/*
-		IgnoreLength test with iterations and count
-	*/
+func ExampleOptionShowBytes_spinner() {
 	bar := NewOptions(-1, OptionSetWidth(10), OptionShowBytes(true))
 
 	time.Sleep(1 * time.Second)
@@ -355,7 +349,7 @@ func TestOptionSetPredictTime(t *testing.T) {
 	}
 }
 
-func TestIgnoreLength(t *testing.T) {
+func TestSpinnerState(t *testing.T) {
 	bar := NewOptions(-1, OptionSetWidth(100))
 	time.Sleep(1 * time.Second)
 	bar.Add(10)

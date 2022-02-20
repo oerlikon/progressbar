@@ -71,9 +71,13 @@ type config struct {
 
 	// show rate of change in kB/sec or MB/sec
 	showBytes bool
+
 	// show the iterations per second
 	showIterationsPerSecond bool
 	showIterationsCount     bool
+
+	// always show total rate
+	totalRate bool
 
 	// whether the progress bar should attempt to predict the finishing
 	// time of the progress based on the start time and the average
@@ -198,10 +202,18 @@ func OptionShowIts() Option {
 	}
 }
 
-// OptionSetItsString sets what's displayed for interations a second. The default is "it" which would display: "it/s"
+// OptionSetItsString sets what's displayed for iterations per second. The default
+// is "it" which would display: "it/s"
 func OptionSetItsString(iterationString string) Option {
 	return func(p *ProgressBar) {
 		p.config.iterationString = iterationString
+	}
+}
+
+// OptionTotalRate selects between total or average rate for rate display
+func OptionTotalRate(val bool) Option {
+	return func(p *ProgressBar) {
+		p.config.totalRate = val
 	}
 }
 
@@ -324,12 +336,9 @@ func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
 		OptionSetWidth(10),
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
-		OptionOnCompletion(func() {
-			fmt.Fprint(os.Stderr, "\n")
-		}),
+		OptionOnCompletion(func() { fmt.Fprint(os.Stderr, "\n") }),
 		OptionSpinnerType(14),
-		OptionFullWidth(),
-	)
+		OptionFullWidth())
 	bar.RenderBlank()
 	return bar
 }
@@ -338,7 +347,6 @@ func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
 // String() can be used to get the output instead.
 func DefaultBytesSilent(maxBytes int64, description ...string) *ProgressBar {
 	// Mostly the same bar as DefaultBytes
-
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
@@ -352,8 +360,7 @@ func DefaultBytesSilent(maxBytes int64, description ...string) *ProgressBar {
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
 		OptionSpinnerType(14),
-		OptionFullWidth(),
-	)
+		OptionFullWidth())
 	bar.RenderBlank()
 	return bar
 }
@@ -373,12 +380,9 @@ func Default(max int64, description ...string) *ProgressBar {
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
 		OptionShowIts(),
-		OptionOnCompletion(func() {
-			fmt.Fprint(os.Stderr, "\n")
-		}),
+		OptionOnCompletion(func() { fmt.Fprint(os.Stderr, "\n") }),
 		OptionSpinnerType(14),
-		OptionFullWidth(),
-	)
+		OptionFullWidth())
 	bar.RenderBlank()
 	return bar
 }
@@ -387,7 +391,6 @@ func Default(max int64, description ...string) *ProgressBar {
 // String() can be used to get the output instead.
 func DefaultSilent(max int64, description ...string) *ProgressBar {
 	// Mostly the same bar as Default
-
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
@@ -401,8 +404,7 @@ func DefaultSilent(max int64, description ...string) *ProgressBar {
 		OptionShowCount(),
 		OptionShowIts(),
 		OptionSpinnerType(14),
-		OptionFullWidth(),
-	)
+		OptionFullWidth())
 	bar.RenderBlank()
 	return bar
 }
@@ -674,91 +676,87 @@ func getStringWidth(c config, str string, colorize bool) int {
 }
 
 func renderProgressBar(c config, s *state) (int, error) {
-	leftBrac := ""
-	rightBrac := ""
-	saucer := ""
-	bytesString := ""
-	str := ""
-
-	averageRate := average(s.counterLastTenRates)
-	if len(s.counterLastTenRates) == 0 || s.finished {
-		// if no average samples, or if finished,
-		// then average rate should be the total rate
-		averageRate = s.currentBytes / time.Since(s.startTime).Seconds()
-	}
+	var sb strings.Builder
 
 	// show iteration count in "current/total" iterations format
 	if c.showIterationsCount {
-		if bytesString == "" {
-			bytesString += "("
+		if sb.Len() == 0 {
+			sb.WriteString("(")
 		} else {
-			bytesString += ", "
+			sb.WriteString(", ")
 		}
 		if !c.ignoreLength {
 			if c.showBytes {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				if currentSuffix == c.maxHumanizedSuffix {
-					bytesString += fmt.Sprintf("%s/%s%s",
-						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix)
+					sb.WriteString(fmt.Sprintf("%s/%s%s",
+						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix))
 				} else {
-					bytesString += fmt.Sprintf("%s%s/%s%s",
-						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix)
+					sb.WriteString(fmt.Sprintf("%s%s/%s%s",
+						currentHumanize, currentSuffix, c.maxHumanized, c.maxHumanizedSuffix))
 				}
 			} else {
-				bytesString += fmt.Sprintf("%.0f/%d", s.currentBytes, c.max)
+				sb.WriteString(fmt.Sprintf("%.0f/%d", s.currentBytes, c.max))
 			}
 		} else {
 			if c.showBytes {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
-				bytesString += fmt.Sprintf("%s%s", currentHumanize, currentSuffix)
+				sb.WriteString(fmt.Sprintf("%s%s", currentHumanize, currentSuffix))
 			} else {
 				if !s.finished {
-					bytesString += fmt.Sprintf("%.0f/%s", s.currentBytes, "?")
+					sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "?"))
 				} else {
-					bytesString += fmt.Sprintf("%.0f/%.0f", s.currentBytes, s.currentBytes)
+					sb.WriteString(fmt.Sprintf("%.0f/%.0f", s.currentBytes, s.currentBytes))
 				}
 			}
 		}
 	}
 
+	rate := s.currentBytes / time.Since(s.startTime).Seconds()
+	if !c.totalRate && !s.finished && len(s.counterLastTenRates) > 0 {
+		rate = average(s.counterLastTenRates)
+	}
+
 	// show rolling average rate in kB/sec or MB/sec
 	if c.showBytes {
-		if bytesString == "" {
-			bytesString += "("
+		if sb.Len() == 0 {
+			sb.WriteString("(")
 		} else {
-			bytesString += ", "
+			sb.WriteString(", ")
 		}
-		kbPerSecond := averageRate / 1000
+		kbPerSecond := rate / 1000
 		if kbPerSecond > 1000 {
-			bytesString += fmt.Sprintf("%0.3f MB/s", kbPerSecond/1000)
+			sb.WriteString(fmt.Sprintf("%0.3f MB/s", kbPerSecond/1000))
 		} else if kbPerSecond > 0 {
-			bytesString += fmt.Sprintf("%0.3f kB/s", kbPerSecond)
+			sb.WriteString(fmt.Sprintf("%0.3f kB/s", kbPerSecond))
 		}
 	}
 
 	// show iterations rate
 	if c.showIterationsPerSecond {
-		if bytesString == "" {
-			bytesString += "("
+		if sb.Len() == 0 {
+			sb.WriteString("(")
 		} else {
-			bytesString += ", "
+			sb.WriteString(", ")
 		}
-		if averageRate > 1 {
-			bytesString += fmt.Sprintf("%0.0f %s/s", averageRate, c.iterationString)
-		} else if 60*averageRate > 1 {
-			bytesString += fmt.Sprintf("%0.0f %s/min", 60*averageRate, c.iterationString)
+		if rate > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/s", rate, c.iterationString))
+		} else if 60*rate > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*rate, c.iterationString))
 		} else {
-			bytesString += fmt.Sprintf("%0.0f %s/h", 3600*averageRate, c.iterationString)
+			sb.WriteString(fmt.Sprintf("%0.0f %s/h", 3600*rate, c.iterationString))
 		}
 	}
-	if bytesString != "" {
-		bytesString += ")"
+	if sb.Len() > 0 {
+		sb.WriteString(")")
 	}
+
+	leftBrac, rightBrac, saucer := "", "", ""
 
 	// show time prediction in "current/total" seconds format
 	if c.predictTime {
 		leftBrac = (time.Duration(time.Since(s.startTime).Seconds()) * time.Second).String()
-		rightBracNum := time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second
+		rightBracNum := time.Duration((1/rate)*(float64(c.max)-float64(s.currentNum))) * time.Second
 		if rightBracNum.Seconds() < 0 {
 			rightBracNum = 0 * time.Second
 		}
@@ -774,7 +772,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			}
 		}
 
-		c.width = width - getStringWidth(c, c.description, true) - 14 - len(bytesString) - len(leftBrac) - len(rightBrac)
+		c.width = width - getStringWidth(c, c.description, true) - 14 - sb.Len() - len(leftBrac) - len(rightBrac)
 		s.currentSaucerSize = int(float64(s.currentPercent) / 100.0 * float64(c.width))
 	}
 	if s.currentSaucerSize > 0 {
@@ -801,18 +799,19 @@ func renderProgressBar(c config, s *state) (int, error) {
 	if repeatAmount < 0 {
 		repeatAmount = 0
 	}
+	str := ""
 	if c.ignoreLength {
 		if !s.finished {
 			dt, st := time.Since(s.startTime).Milliseconds()/100, c.spinnerType
 			str = fmt.Sprintf("\r %s %s%s ",
 				spinners[st][int(math.Round(math.Mod(float64(dt), float64(len(spinners[st])))))],
 				c.description,
-				bytesString)
+				sb.String())
 		} else {
 			str = fmt.Sprintf("\r%4d%% %s%s ",
 				100,
 				c.description,
-				bytesString)
+				sb.String())
 		}
 	} else if leftBrac == "" {
 		str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s ",
@@ -822,7 +821,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			saucer,
 			strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 			c.theme.BarEnd,
-			bytesString)
+			sb.String())
 	} else {
 		if s.currentPercent == 100 {
 			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s ",
@@ -832,7 +831,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				saucer,
 				strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 				c.theme.BarEnd,
-				bytesString)
+				sb.String())
 		} else {
 			str = fmt.Sprintf("\r%s%4d%% %s%s%s%s %s [%s:%s] ",
 				c.description,
@@ -841,17 +840,15 @@ func renderProgressBar(c config, s *state) (int, error) {
 				saucer,
 				strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 				c.theme.BarEnd,
-				bytesString,
+				sb.String(),
 				leftBrac,
 				rightBrac)
 		}
 	}
-
 	if c.colorCodes {
 		// convert any color codes in the progress bar into the respective ANSI codes
 		str = colorstring.Color(str)
 	}
-
 	s.rendered = str
 
 	return getStringWidth(c, str, false), writeString(c, str)
