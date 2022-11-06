@@ -114,6 +114,13 @@ type Theme struct {
 	BarEnd        string
 }
 
+var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEnd: "|"}
+
+var spinners = map[int][]string{
+	9:  {"|", "/", "-", "\\"},
+	14: {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+}
+
 // Option is the type all options need to adhere to
 type Option func(p *ProgressBar)
 
@@ -256,8 +263,6 @@ func OptionUseANSICodes(val bool) Option {
 	}
 }
 
-var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEnd: "|"}
-
 // NewOptions constructs a new instance of ProgressBar, with any options you specify
 func NewOptions(max int, options ...Option) *ProgressBar {
 	return NewOptions64(int64(max), options...)
@@ -284,8 +289,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 		o(&b)
 	}
 
-	if b.config.spinnerType < 0 || b.config.spinnerType > 75 {
-		panic("invalid spinner type, must be between 0 and 75")
+	if b.config.spinnerType != 9 && b.config.spinnerType != 14 {
+		panic("invalid spinner type, must be 9 or 14")
 	}
 
 	// ignoreLength if max bytes not known
