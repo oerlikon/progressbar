@@ -38,7 +38,6 @@ type state struct {
 	currentPercent    int
 	lastPercent       int
 	currentSaucerSize int
-	isAltSaucerHead   bool
 
 	lastShown time.Time
 	startTime time.Time
@@ -106,19 +105,22 @@ type config struct {
 
 	// whether the render function should make use of ANSI codes to reduce console I/O
 	useANSICodes bool
-
-	// showDescriptionAtLineEnd specifies whether description should be written at line end instead of line start
-	showDescriptionAtLineEnd bool
 }
 
 // Theme defines the elements of the bar
 type Theme struct {
 	Saucer        string
-	AltSaucerHead string
 	SaucerHead    string
 	SaucerPadding string
 	BarStart      string
 	BarEnd        string
+}
+
+var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEnd: "|"}
+
+var spinners = map[int][]string{
+	9:  {"|", "/", "-", "\\"},
+	14: {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
 }
 
 // Option is the type all options need to adhere to
@@ -269,15 +271,6 @@ func OptionUseANSICodes(val bool) Option {
 	}
 }
 
-// OptionShowDescriptionAtLineEnd defines whether description should be written at line end instead of line start
-func OptionShowDescriptionAtLineEnd() Option {
-	return func(p *ProgressBar) {
-		p.config.showDescriptionAtLineEnd = true
-	}
-}
-
-var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEnd: "|"}
-
 // NewOptions constructs a new instance of ProgressBar, with any options you specify
 func NewOptions(max int, options ...Option) *ProgressBar {
 	return NewOptions64(int64(max), options...)
@@ -305,8 +298,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 		o(&b)
 	}
 
-	if b.config.spinnerType < 0 || b.config.spinnerType > 75 {
-		panic("invalid spinner type, must be between 0 and 75")
+	if b.config.spinnerType != 9 && b.config.spinnerType != 14 {
+		panic("invalid spinner type, must be 9 or 14")
 	}
 
 	// ignoreLength if max bytes not known
@@ -809,9 +802,6 @@ func renderProgressBar(c config, s *state) (int, error) {
 		case leftBrac == "" && rightBrac != "":
 			amend = 3 // space and square brackets
 		}
-		if c.showDescriptionAtLineEnd {
-			amend += 1 // another space
-		}
 
 		c.width = width - getStringWidth(c, c.description, true) - 10 - amend - sb.Len() - len(leftBrac) - len(rightBrac)
 		s.currentSaucerSize = int(float64(s.currentPercent) / 100.0 * float64(c.width))
@@ -822,27 +812,18 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else {
 			saucer = strings.Repeat(c.theme.Saucer, s.currentSaucerSize-1)
 		}
-
-		// Check if an alternate saucer head is set for animation
-		if c.theme.AltSaucerHead != "" && s.isAltSaucerHead {
-			saucerHead = c.theme.AltSaucerHead
-			s.isAltSaucerHead = false
-		} else if c.theme.SaucerHead == "" || s.currentSaucerSize == c.width {
+		if c.theme.SaucerHead == "" || s.currentSaucerSize == c.width {
 			// use the saucer for the saucer head if it hasn't been set
 			// to preserve backwards compatibility
 			saucerHead = c.theme.Saucer
 		} else {
 			saucerHead = c.theme.SaucerHead
-			s.isAltSaucerHead = true
 		}
 	}
 
 	/*
 		Progress Bar format
 		Description % |------        |  (kb/s) (iteration count) (iteration rate) (predict time)
-
-		or if showDescriptionAtLineEnd is enabled
-		% |------        |  (kb/s) (iteration count) (iteration rate) (predict time) Description
 	*/
 
 	repeatAmount := c.width - s.currentSaucerSize
@@ -855,31 +836,16 @@ func renderProgressBar(c config, s *state) (int, error) {
 	if c.ignoreLength {
 		spinner := spinners[c.spinnerType][int(math.Round(math.Mod(float64(time.Since(s.startTime).Milliseconds()/100), float64(len(spinners[c.spinnerType])))))]
 		if c.elapsedTime {
-			if c.showDescriptionAtLineEnd {
-				str = fmt.Sprintf("\r%s %s [%s] %s ",
-					spinner,
-					sb.String(),
-					leftBrac,
-					c.description)
-			} else {
-				str = fmt.Sprintf("\r%s %s %s [%s] ",
-					spinner,
-					c.description,
-					sb.String(),
-					leftBrac)
-			}
+			str = fmt.Sprintf("\r%s %s %s [%s] ",
+				spinner,
+				c.description,
+				sb.String(),
+				leftBrac)
 		} else {
-			if c.showDescriptionAtLineEnd {
-				str = fmt.Sprintf("\r%s %s %s ",
-					spinner,
-					sb.String(),
-					c.description)
-			} else {
-				str = fmt.Sprintf("\r%s %s %s ",
-					spinner,
-					c.description,
-					sb.String())
-			}
+			str = fmt.Sprintf("\r%s %s %s ",
+				spinner,
+				c.description,
+				sb.String())
 		}
 	} else if rightBrac == "" {
 		str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
@@ -895,11 +861,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			str = fmt.Sprintf("%s [%s]", str, leftBrac)
 		}
 
-		if c.showDescriptionAtLineEnd {
-			str = fmt.Sprintf("\r%s %s ", str, c.description)
-		} else {
-			str = fmt.Sprintf("\r%s%s ", c.description, str)
-		}
+		str = fmt.Sprintf("\r%s%s ", c.description, str)
 	} else {
 		if s.currentPercent == 100 {
 			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
@@ -915,11 +877,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				str = fmt.Sprintf("%s [%s]", str, leftBrac)
 			}
 
-			if c.showDescriptionAtLineEnd {
-				str = fmt.Sprintf("\r%s %s", str, c.description)
-			} else {
-				str = fmt.Sprintf("\r%s%s", c.description, str)
-			}
+			str = fmt.Sprintf("\r%s%s", c.description, str)
 		} else {
 			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s [%s:%s]",
 				s.currentPercent,
@@ -932,11 +890,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				leftBrac,
 				rightBrac)
 
-			if c.showDescriptionAtLineEnd {
-				str = fmt.Sprintf("\r%s %s", str, c.description)
-			} else {
-				str = fmt.Sprintf("\r%s%s", c.description, str)
-			}
+			str = fmt.Sprintf("\r%s%s", c.description, str)
 		}
 	}
 

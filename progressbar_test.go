@@ -141,20 +141,6 @@ func ExampleOptionSetPredictTime() {
 	// 10% |█         |
 }
 
-func ExampleOptionShowDescriptionAtLineEnd() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionShowDescriptionAtLineEnd(), OptionSetDescription("hello"))
-	_ = bar.Add(10)
-	// Output:
-	// 10% |█         |  [0s:0s] hello
-}
-
-func ExampleOptionShowDescriptionAtLineEnd_spinner() {
-	bar := NewOptions(-1, OptionSetWidth(10), OptionShowDescriptionAtLineEnd(), OptionSetDescription("hello"))
-	_ = bar.Add(1)
-	// Output:
-	// |  [0s] hello
-}
-
 func ExampleDefault() {
 	bar := Default(100)
 	for i := 0; i < 50; i++ {
@@ -680,13 +666,6 @@ func TestOptionFullWidth(t *testing.T) {
 				"\r                                                                               \r" +
 				"\rProgress: 100% |█████████████████████████████████████████████████████| ",
 		},
-		{ // 3
-			[]Option{OptionSetDescription("<1/5>"), OptionShowDescriptionAtLineEnd()},
-			"" +
-				"\r  10% |█████                                                   |  [1s:9s] <1/5>" +
-				"\r                                                                               \r" +
-				"\r 100% |████████████████████████████████████████████████████████|  <1/5>",
-		},
 		{ // 4
 			[]Option{OptionSetPredictTime(false)},
 			"" +
@@ -735,13 +714,6 @@ func TestOptionFullWidth(t *testing.T) {
 				"\rProgress:  10% |███                                 | (10/100, 10 it/s) [1s:9s]" +
 				"\r                                                                               \r" +
 				"\rProgress: 100% |███████████████████████████████████| (100/100, 50 it/s)",
-		},
-		{ // 11
-			[]Option{OptionSetDescription("<3/5>"), OptionShowIts(), OptionShowCount(), OptionShowElapsedTimeOnFinish(), OptionShowDescriptionAtLineEnd()},
-			"" +
-				"\r  10% |███                                    | (10/100, 10 it/s) [1s:9s] <3/5>" +
-				"\r                                                                               \r" +
-				"\r 100% |██████████████████████████████████████| (100/100, 50 it/s) [2s] <3/5>",
 		},
 		{ // 12
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false)},
