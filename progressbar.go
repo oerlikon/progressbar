@@ -194,6 +194,9 @@ func OptionEnableColorCodes(colorCodes bool) Option {
 func OptionSetElapsedTime(elapsedTime bool) Option {
 	return func(p *ProgressBar) {
 		p.config.elapsedTime = elapsedTime
+		if !elapsedTime {
+			p.config.predictTime = false
+		}
 	}
 }
 
@@ -676,7 +679,7 @@ func (p *ProgressBar) State() State {
 	if p.state.currentNum > 0 {
 		s.SecondsLeft = s.SecondsSince / float64(p.state.currentNum) * (float64(p.config.max) - float64(p.state.currentNum))
 	}
-	s.KBsPerSecond = float64(p.state.currentBytes) / 1024.0 / s.SecondsSince
+	s.KBsPerSecond = float64(p.state.currentBytes) / 1000 / s.SecondsSince
 	return s
 }
 
@@ -773,7 +776,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else if averageRate*60 > 1 {
 			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*averageRate, c.iterationString))
 		} else {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/hr", 3600*averageRate, c.iterationString))
+			sb.WriteString(fmt.Sprintf("%0.0f %s/h", 3600*averageRate, c.iterationString))
 		}
 	}
 	if sb.Len() > 0 {
@@ -785,7 +788,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 	// show time prediction in "current/total" seconds format
 	switch {
 	case c.predictTime:
-		rightBracNum := (time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second)
+		rightBracNum := time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second
 		if rightBracNum.Seconds() < 0 {
 			rightBracNum = 0 * time.Second
 		}
@@ -812,7 +815,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 
 		c.width = width - getStringWidth(c, c.description, true) - 10 - amend - sb.Len() - len(leftBrac) - len(rightBrac)
-		s.currentSaucerSize = int(float64(s.currentPercent) / 100.0 * float64(c.width))
+		s.currentSaucerSize = int(float64(s.currentPercent) / 100 * float64(c.width))
 	}
 	if s.currentSaucerSize > 0 {
 		if c.ignoreLength {
@@ -923,10 +926,7 @@ func clearProgressBar(c config, s state) error {
 	// fill the empty content
 	// to overwrite the progress bar and jump
 	// back to the beginning of the line
-	str := fmt.Sprintf("\r%s\r", strings.Repeat(" ", s.maxLineWidth))
-	return writeString(c, str)
-	// the following does not show correctly if the previous line is longer than subsequent line
-	// return writeString(c, "\r")
+	return writeString(c, fmt.Sprintf("\r%s\r", strings.Repeat(" ", s.maxLineWidth)))
 }
 
 func writeString(c config, str string) error {
@@ -1001,22 +1001,18 @@ func average(xs []float64) float64 {
 	return total / float64(len(xs))
 }
 
-func humanizeBytes(s float64) (string, string) {
-	sizes := []string{" B", " kB", " MB", " GB", " TB", " PB", " EB"}
-	base := 1000.0
+var sizes = []string{" B", " kB", " MB", " GB", " TB", " PB", " EB"}
 
+func humanizeBytes(s float64) (string, string) {
 	if s < 10 {
 		return fmt.Sprintf("%2.0f", s), sizes[0]
 	}
-	e := math.Floor(logn(float64(s), base))
-	suffix := sizes[int(e)]
-	val := math.Floor(float64(s)/math.Pow(base, e)*10+0.5) / 10
-	f := "%.0f"
+	e := math.Floor(logn(s, 1000))
+	val, suffix := math.Floor(s/math.Pow(1000, e)*10+0.5)/10, sizes[int(e)]
 	if val < 10 {
-		f = "%.1f"
+		return fmt.Sprintf("%.1f", val), suffix
 	}
-
-	return fmt.Sprintf(f, val), suffix
+	return fmt.Sprintf("%.0f", val), suffix
 }
 
 func logn(n, b float64) float64 {
