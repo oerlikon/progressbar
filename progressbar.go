@@ -673,7 +673,7 @@ func (p *ProgressBar) State() State {
 	if p.state.currentNum > 0 {
 		s.SecondsLeft = s.SecondsSince / float64(p.state.currentNum) * (float64(p.config.max) - float64(p.state.currentNum))
 	}
-	s.KBsPerSecond = float64(p.state.currentBytes) / 1024 / s.SecondsSince
+	s.KBsPerSecond = float64(p.state.currentBytes) / 1000 / s.SecondsSince
 	return s
 }
 
@@ -1001,8 +1001,8 @@ func humanizeBytes(s float64) (string, string) {
 	if s < 10 {
 		return fmt.Sprintf("%2.0f", s), sizes[0]
 	}
-	e := math.Floor(logn(s, 1024))
-	val, suffix := math.Floor(s/math.Pow(1024, e)*10+0.5)/10, sizes[int(e)]
+	e := math.Floor(logn(s, 1000))
+	val, suffix := math.Floor(s/math.Pow(1000, e)*10+0.5)/10, sizes[int(e)]
 	if val < 10 {
 		return fmt.Sprintf("%.1f", val), suffix
 	}
