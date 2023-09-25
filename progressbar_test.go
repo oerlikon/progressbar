@@ -282,7 +282,7 @@ func TestBarFastBytes(t *testing.T) {
 	buf := strings.Builder{}
 	bar := NewOptions64(1e8, OptionShowBytes(true), OptionShowCount(), OptionSetWidth(10), OptionSetWriter(&buf))
 	time.Sleep(time.Millisecond)
-	bar.Add(1e7)
+	bar.Add(2e7)
 	if !strings.Contains(buf.String(), " GB/s)") {
 		t.Errorf("wrong string: %s", buf.String())
 	}
@@ -383,6 +383,22 @@ func TestOptionSetPredictTime(t *testing.T) {
 	result = strings.TrimSpace(buf.String())
 	expect = "70% |███████   |  [0s:0s]"
 
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
+func TestOptionSetElapsedTime(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions(
+		10,
+		OptionSetElapsedTime(false),
+		OptionSetWidth(10),
+		OptionSetWriter(&buf),
+	)
+	_ = bar.Add(2)
+	result := strings.TrimSpace(buf.String())
+	expect := "20% |██        |"
 	if result != expect {
 		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
 	}
@@ -666,70 +682,70 @@ func TestOptionFullWidth(t *testing.T) {
 				"\r                                                                               \r" +
 				"\rProgress: 100% |█████████████████████████████████████████████████████| ",
 		},
-		{ // 4
+		{ // 3
 			[]Option{OptionSetPredictTime(false)},
 			"" +
 				"\r  10% |██████                                                          |  " +
 				"\r                                                                          \r" +
 				"\r 100% |████████████████████████████████████████████████████████████████|  ",
 		},
-		{ // 5
+		{ // 4
 			[]Option{OptionSetPredictTime(false), OptionShowElapsedTimeOnFinish()},
 			"" +
 				"\r  10% |██████                                                          |  " +
 				"\r                                                                          \r" +
 				"\r 100% |████████████████████████████████████████████████████████████████|  [2s] ",
 		},
-		{ // 6
+		{ // 5
 			[]Option{OptionSetPredictTime(false), OptionSetElapsedTime(false)},
 			"" +
 				"\r  10% |██████                                                               |  " +
 				"\r                                                                               \r" +
 				"\r 100% |█████████████████████████████████████████████████████████████████████|  ",
 		},
-		{ // 7
+		{ // 6
 			[]Option{OptionShowIts()},
 			"" +
 				"\r  10% |█████                                                | (10 it/s) [1s:9s]" +
 				"\r                                                                               \r" +
 				"\r 100% |█████████████████████████████████████████████████████| (50 it/s)",
 		},
-		{ // 8
+		{ // 7
 			[]Option{OptionShowCount()},
 			"" +
 				"\r  10% |█████                                                 | (10/100) [1s:9s]" +
 				"\r                                                                               \r" +
 				"\r 100% |█████████████████████████████████████████████████████| (100/100)",
 		},
-		{ // 9
+		{ // 8
 			[]Option{OptionShowIts(), OptionShowCount(), OptionShowElapsedTimeOnFinish()},
 			"" +
 				"\r  10% |████                                         | (10/100, 10 it/s) [1s:9s]" +
 				"\r                                                                               \r" +
 				"\r 100% |████████████████████████████████████████████| (100/100, 50 it/s) [2s]",
 		},
-		{ // 10
+		{ // 9
 			[]Option{OptionSetDescription("Progress:"), OptionShowIts(), OptionShowCount()},
 			"" +
 				"\rProgress:  10% |███                                 | (10/100, 10 it/s) [1s:9s]" +
 				"\r                                                                               \r" +
 				"\rProgress: 100% |███████████████████████████████████| (100/100, 50 it/s)",
 		},
-		{ // 12
+		{ // 10
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false)},
 			"" +
 				"\r  10% |████                                           | (10/100, 10 it/s) " +
 				"\r                                                                          \r" +
 				"\r 100% |██████████████████████████████████████████████| (100/100, 50 it/s) ",
 		},
-		{ // 13
+		{ // 11
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false), OptionShowElapsedTimeOnFinish()},
 			"" +
 				"\r  10% |████                                           | (10/100, 10 it/s) " +
 				"\r                                                                          \r" +
 				"\r 100% |██████████████████████████████████████████████| (100/100, 50 it/s) [2s] ",
 		},
-		{ // 14
+		{ // 12
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false), OptionSetElapsedTime(false)},
 			"" +
 				"\r  10% |█████                                               | (10/100, 10 it/s) " +
