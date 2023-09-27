@@ -71,9 +71,13 @@ type config struct {
 
 	// show rate of change in kB/sec or MB/sec
 	showBytes bool
+
 	// show the iterations per second
 	showIterationsPerSecond bool
 	showIterationsCount     bool
+
+	// always display total rate
+	totalRate bool
 
 	// whether the progress bar should show elapsed time.
 	// always enabled if predictTime is true.
@@ -224,6 +228,13 @@ func OptionShowIts() Option {
 func OptionSetItsString(iterationString string) Option {
 	return func(p *ProgressBar) {
 		p.config.iterationString = iterationString
+	}
+}
+
+// OptionTotalRate selects between total or recent average rate for rate display
+func OptionTotalRate(val bool) Option {
+	return func(p *ProgressBar) {
+		p.config.totalRate = val
 	}
 }
 
@@ -514,15 +525,18 @@ func (p *ProgressBar) Add64(num int64) error {
 
 	p.state.currentBytes += float64(num)
 
-	// reset the countdown timer every second to take rolling average
-	p.state.counterNumSinceLast += num
-	if time.Since(p.state.counterTime).Seconds() > 0.5 {
-		p.state.counterLastTenRates = append(p.state.counterLastTenRates, float64(p.state.counterNumSinceLast)/time.Since(p.state.counterTime).Seconds())
-		if len(p.state.counterLastTenRates) > 10 {
-			p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
+	if !p.config.totalRate {
+		// reset the countdown timer approx every second to take rolling average
+		p.state.counterNumSinceLast += num
+		if t := time.Since(p.state.counterTime).Seconds(); t > 0.5 {
+			rate := float64(p.state.counterNumSinceLast) / t
+			p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
+			if len(p.state.counterLastTenRates) > 10 {
+				p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
+			}
+			p.state.counterTime = time.Now()
+			p.state.counterNumSinceLast = 0
 		}
-		p.state.counterTime = time.Now()
-		p.state.counterNumSinceLast = 0
 	}
 
 	percent := float64(p.state.currentNum) / float64(p.config.max)
@@ -704,17 +718,6 @@ func getStringWidth(c config, str string, colorize bool) int {
 func renderProgressBar(c config, s *state) (int, error) {
 	var sb strings.Builder
 
-	averageRate := average(s.counterLastTenRates)
-	if len(s.counterLastTenRates) == 0 || s.finished {
-		// if no average samples, or if finished,
-		// then average rate should be the total rate
-		if t := time.Since(s.startTime).Seconds(); t > 0 {
-			averageRate = s.currentBytes / t
-		} else {
-			averageRate = 0
-		}
-	}
-
 	// show iteration count in "current/total" iterations format
 	if c.showIterationsCount {
 		if sb.Len() == 0 {
@@ -747,30 +750,40 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 	}
 
-	// show rolling average rate
-	if c.showBytes && averageRate > 0 && !math.IsInf(averageRate, 1) {
+	rate := 0.0
+	if len(s.counterLastTenRates) > 0 && !s.finished && !c.totalRate {
+		// display recent rolling average rate
+		rate = average(s.counterLastTenRates)
+	} else if t := time.Since(s.startTime).Seconds(); t > 0 {
+		// if no average samples, or if finished, or total rate option is set
+		// then display total rate
+		rate = s.currentBytes / t
+	}
+
+	// format rate as units of bytes per second
+	if c.showBytes && rate > 0 && !math.IsInf(rate, 1) {
 		if sb.Len() == 0 {
 			sb.WriteString("(")
 		} else {
 			sb.WriteString(", ")
 		}
-		currentHumanize, currentSuffix := humanizeBytes(averageRate)
+		currentHumanize, currentSuffix := humanizeBytes(rate)
 		sb.WriteString(fmt.Sprintf("%s%s/s", currentHumanize, currentSuffix))
 	}
 
-	// show iterations rate
+	// format rate as iterations per second/minute/hour
 	if c.showIterationsPerSecond {
 		if sb.Len() == 0 {
 			sb.WriteString("(")
 		} else {
 			sb.WriteString(", ")
 		}
-		if averageRate > 1 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/s", averageRate, c.iterationString))
-		} else if averageRate*60 > 1 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*averageRate, c.iterationString))
+		if rate > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/s", rate, c.iterationString))
+		} else if 60*rate > 1 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*rate, c.iterationString))
 		} else {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/h", 3600*averageRate, c.iterationString))
+			sb.WriteString(fmt.Sprintf("%0.0f %s/h", 3600*rate, c.iterationString))
 		}
 	}
 	if sb.Len() > 0 {
@@ -782,7 +795,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 	// show time prediction in "current/total" seconds format
 	switch {
 	case c.predictTime:
-		rightBracNum := time.Duration((1/averageRate)*(float64(c.max)-float64(s.currentNum))) * time.Second
+		rightBracNum := time.Duration((1/rate)*(float64(c.max)-float64(s.currentNum))) * time.Second
 		if rightBracNum.Seconds() < 0 {
 			rightBracNum = 0 * time.Second
 		}
