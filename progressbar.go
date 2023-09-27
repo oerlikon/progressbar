@@ -79,8 +79,6 @@ type config struct {
 	// always enabled if predictTime is true.
 	elapsedTime bool
 
-	showElapsedTimeOnFinish bool
-
 	// whether the progress bar should attempt to predict the finishing
 	// time of the progress based on the start time and the average
 	// number of seconds between  increments.
@@ -121,6 +119,7 @@ var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEn
 var spinners = map[int][]string{
 	9:  {"|", "/", "-", "\\"},
 	14: {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
+	59: {".  ", ".. ", "...", " ..", "  .", "   "},
 }
 
 // Option is the type all options need to adhere to
@@ -221,13 +220,6 @@ func OptionShowIts() Option {
 	}
 }
 
-// OptionShowElapsedOnFinish will keep the display of elapsed time on finish
-func OptionShowElapsedTimeOnFinish() Option {
-	return func(p *ProgressBar) {
-		p.config.showElapsedTimeOnFinish = true
-	}
-}
-
 // OptionSetItsString sets what's displayed for iterations a second. The default is "it" which would display: "it/s"
 func OptionSetItsString(iterationString string) Option {
 	return func(p *ProgressBar) {
@@ -301,8 +293,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 		o(&b)
 	}
 
-	if b.config.spinnerType != 9 && b.config.spinnerType != 14 {
-		panic("invalid spinner type, must be 9 or 14")
+	if b.config.spinnerType != 9 && b.config.spinnerType != 14 && b.config.spinnerType != 59 {
+		panic("invalid spinner type, must be 9 or 14 or 59")
 	}
 
 	// ignoreLength if max bytes not known
@@ -739,8 +731,10 @@ func renderProgressBar(c config, s *state) (int, error) {
 			if c.showBytes {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				sb.WriteString(fmt.Sprintf("%s%s", currentHumanize, currentSuffix))
+			} else if !s.finished {
+				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "?"))
 			} else {
-				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "-"))
+				sb.WriteString(fmt.Sprintf("%.0f/%.0f", s.currentBytes, s.currentBytes))
 			}
 		}
 	}
@@ -799,16 +793,17 @@ func renderProgressBar(c config, s *state) (int, error) {
 		amend := 1 // an extra space at eol
 		switch {
 		case leftBrac != "" && rightBrac != "":
-			amend = 4 // space, square brackets and colon
+			amend += 4 // space, square brackets and colon
 		case leftBrac != "" && rightBrac == "":
-			amend = 4 // space and square brackets and another space
+			amend += 3 // space and square brackets
 		case leftBrac == "" && rightBrac != "":
-			amend = 3 // space and square brackets
+			amend += 3 // space and square brackets
 		}
 
 		c.width = width - getStringWidth(c, c.description, true) - 10 - amend - sb.Len() - len(leftBrac) - len(rightBrac)
 		s.currentSaucerSize = int(float64(s.currentPercent) / 100 * float64(c.width))
 	}
+
 	if s.currentSaucerSize > 0 {
 		if c.ignoreLength {
 			saucer = strings.Repeat(c.theme.SaucerPadding, s.currentSaucerSize-1)
@@ -837,71 +832,56 @@ func renderProgressBar(c config, s *state) (int, error) {
 	str := ""
 
 	if c.ignoreLength {
-		spinner := spinners[c.spinnerType][int(math.Round(math.Mod(float64(time.Since(s.startTime).Milliseconds()/100), float64(len(spinners[c.spinnerType])))))]
-		if c.elapsedTime {
-			str = fmt.Sprintf("\r%s %s %s [%s] ",
-				spinner,
-				c.description,
-				sb.String(),
-				leftBrac)
+		if !s.finished {
+			dt, st := time.Since(s.startTime).Milliseconds()/100, c.spinnerType
+			str = "\r" +
+				spinners[st][int(math.Round(math.Mod(float64(dt), float64(len(spinners[st])))))] +
+				sp(" ", c.description != "") +
+				c.description +
+				sp(" ", sb.Len() > 0) +
+				sb.String() +
+				sp(" [", c.elapsedTime) +
+				sp(leftBrac, c.elapsedTime) +
+				sp("]", c.elapsedTime) + " "
 		} else {
-			str = fmt.Sprintf("\r%s %s %s ",
-				spinner,
-				c.description,
-				sb.String())
+			str = "\r 100%%" +
+				sp(" ", c.description != "") +
+				c.description +
+				sp(" ", sb.Len() > 0) +
+				sb.String() +
+				sp(" [", c.elapsedTime) +
+				sp(leftBrac, c.elapsedTime) +
+				sp("]", c.elapsedTime) + " "
 		}
-	} else if rightBrac == "" {
-		str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
-			s.currentPercent,
-			c.theme.BarStart,
-			saucer,
-			saucerHead,
-			strings.Repeat(c.theme.SaucerPadding, repeatAmount),
-			c.theme.BarEnd,
-			sb.String())
-
-		if s.currentPercent == 100 && c.showElapsedTimeOnFinish {
-			str = fmt.Sprintf("%s [%s]", str, leftBrac)
-		}
-
-		str = fmt.Sprintf("\r%s%s ", c.description, str)
+	} else if rightBrac == "" || s.finished {
+		str = "\r" +
+			c.description +
+			fmt.Sprintf("%4d%% ", s.currentPercent) +
+			c.theme.BarStart +
+			saucer +
+			saucerHead +
+			strings.Repeat(c.theme.SaucerPadding, repeatAmount) +
+			c.theme.BarEnd + " " +
+			sb.String() +
+			sp(" [", c.elapsedTime || c.predictTime) +
+			sp(leftBrac, c.elapsedTime || c.predictTime) +
+			sp("]", c.elapsedTime || c.predictTime) + " "
 	} else {
-		if s.currentPercent == 100 {
-			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s",
-				s.currentPercent,
-				c.theme.BarStart,
-				saucer,
-				saucerHead,
-				strings.Repeat(c.theme.SaucerPadding, repeatAmount),
-				c.theme.BarEnd,
-				sb.String())
-
-			if c.showElapsedTimeOnFinish {
-				str = fmt.Sprintf("%s [%s]", str, leftBrac)
-			}
-
-			str = fmt.Sprintf("\r%s%s", c.description, str)
-		} else {
-			str = fmt.Sprintf("%4d%% %s%s%s%s%s %s [%s:%s]",
-				s.currentPercent,
-				c.theme.BarStart,
-				saucer,
-				saucerHead,
-				strings.Repeat(c.theme.SaucerPadding, repeatAmount),
-				c.theme.BarEnd,
-				sb.String(),
-				leftBrac,
-				rightBrac)
-
-			str = fmt.Sprintf("\r%s%s", c.description, str)
-		}
+		str = "\r" +
+			c.description +
+			fmt.Sprintf("%4d%% ", s.currentPercent) +
+			c.theme.BarStart +
+			saucer +
+			saucerHead +
+			strings.Repeat(c.theme.SaucerPadding, repeatAmount) +
+			c.theme.BarEnd + " " +
+			sb.String() +
+			" [" + leftBrac + ":" + rightBrac + "] "
 	}
-
 	if c.colorCodes {
 		// convert any color codes in the progress bar into the respective ANSI codes
 		str = colorstring.Color(str)
 	}
-
 	s.rendered = str
 
 	return getStringWidth(c, str, false), writeString(c, str)
@@ -1009,6 +989,13 @@ func humanizeBytes(s float64) (string, string) {
 
 func logn(n, b float64) float64 {
 	return math.Log(n) / math.Log(b)
+}
+
+func sp(s string, p bool) string {
+	if p {
+		return s
+	}
+	return ""
 }
 
 // termWidth function returns the visible width of the current terminal
