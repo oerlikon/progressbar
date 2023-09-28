@@ -95,6 +95,12 @@ type config struct {
 	// spinnerType should be a number between 0-75
 	spinnerType int
 
+	// spinnerTypeOptionUsed remembers if the spinnerType was changed manually
+	spinnerTypeOptionUsed bool
+
+	// spinner represents the spinner as a slice of string
+	spinner []string
+
 	// fullWidth specifies whether to measure and set the bar to a specific width
 	fullWidth bool
 
@@ -136,7 +142,16 @@ func OptionSetWidth(s int) Option {
 // OptionSpinnerType sets the type of spinner used for indeterminate bars
 func OptionSpinnerType(spinnerType int) Option {
 	return func(p *ProgressBar) {
+		p.config.spinnerTypeOptionUsed = true
 		p.config.spinnerType = spinnerType
+	}
+}
+
+// OptionSpinnerCustom sets the spinner used for indeterminate bars to the passed
+// slice of string
+func OptionSpinnerCustom(spinner []string) Option {
+	return func(p *ProgressBar) {
+		p.config.spinner = spinner
 	}
 }
 
@@ -502,6 +517,11 @@ func (p *ProgressBar) Add64(num int64) error {
 		return nil
 	}
 
+	// error out since OptionSpinnerCustom will always override a manually set spinnerType
+	if p.config.spinnerTypeOptionUsed && len(p.config.spinner) > 0 {
+		return errors.New("OptionSpinnerType and OptionSpinnerCustom cannot be used together")
+	}
+
 	if p.config.max == 0 {
 		return errors.New("max must be greater than 0")
 	}
@@ -553,6 +573,8 @@ func (p *ProgressBar) Clear() error {
 // Describe will change the description shown before the progress, which
 // can be changed on the fly (as for a slow running process).
 func (p *ProgressBar) Describe(description string) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	p.config.description = description
 	if p.config.invisible {
 		return
@@ -834,7 +856,11 @@ func renderProgressBar(c config, s *state) (int, error) {
 	str := ""
 
 	if c.ignoreLength {
-		spinner := spinners[c.spinnerType][int(math.Round(math.Mod(float64(time.Since(s.startTime).Milliseconds()/100), float64(len(spinners[c.spinnerType])))))]
+		selectedSpinner := spinners[c.spinnerType]
+		if len(c.spinner) > 0 {
+			selectedSpinner = c.spinner
+		}
+		spinner := selectedSpinner[int(math.Round(math.Mod(float64(time.Since(s.startTime).Milliseconds()/100), float64(len(selectedSpinner)))))]
 		if c.elapsedTime {
 			str = fmt.Sprintf("\r%s %s %s [%s] ",
 				spinner,
@@ -1021,9 +1047,6 @@ var termWidth = func() (width int, err error) {
 	if err == nil {
 		return width, nil
 	}
-	width, _, err = term.GetSize(int(os.Stderr.Fd()))
-	if err == nil {
-		return width, nil
-	}
+
 	return 0, err
 }
