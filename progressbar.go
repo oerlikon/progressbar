@@ -49,7 +49,7 @@ type state struct {
 	maxLineWidth int
 	currentBytes float64
 	finished     bool
-	exit         bool // Progress bar exit halfway
+	stopped      bool
 
 	rendered string
 }
@@ -91,7 +91,7 @@ type config struct {
 	// minimum time to wait in between updates
 	throttleDuration time.Duration
 
-	// clear bar once finished
+	// clear bar once finished or stopped
 	clearOnFinish bool
 
 	// spinnerType should be a number between 0-75
@@ -246,14 +246,14 @@ func OptionThrottle(duration time.Duration) Option {
 	}
 }
 
-// OptionClearOnFinish will clear the bar once its finished
+// OptionClearOnFinish will clear the bar once it's finished or stopped
 func OptionClearOnFinish() Option {
 	return func(p *ProgressBar) {
 		p.config.clearOnFinish = true
 	}
 }
 
-// OptionOnCompletion will invoke cmpl function once its finished
+// OptionOnCompletion will invoke cmpl function once it's finished or stopped
 func OptionOnCompletion(cmpl func()) Option {
 	return func(p *ProgressBar) {
 		p.config.onCompletion = cmpl
@@ -319,6 +319,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 
 	if b.config.renderWithBlankState {
 		b.RenderBlank()
+	} else {
+		b.state.lastShown = b.state.startTime
 	}
 
 	return &b
@@ -328,7 +330,6 @@ func getBasicState() state {
 	now := time.Now()
 	return state{
 		startTime:   now,
-		lastShown:   now,
 		counterTime: now,
 	}
 }
@@ -414,7 +415,6 @@ func Default(max int64, description ...string) *ProgressBar {
 // String() can be used to get the output instead.
 func DefaultSilent(max int64, description ...string) *ProgressBar {
 	// Mostly the same bar as Default
-
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
@@ -443,9 +443,7 @@ func (p *ProgressBar) RenderBlank() error {
 	if p.config.invisible {
 		return nil
 	}
-	if p.state.currentNum == 0 {
-		p.state.lastShown = time.Time{}
-	}
+	p.state.lastShown = time.Time{} // render regardless of throttling
 	return p.render()
 }
 
@@ -453,29 +451,29 @@ func (p *ProgressBar) RenderBlank() error {
 // to calculate current time and the time left.
 func (p *ProgressBar) Reset() {
 	p.lock.Lock()
-	defer p.lock.Unlock()
-
 	p.state = getBasicState()
+	p.lock.Unlock()
 }
 
 // Finish will fill the bar to full
 func (p *ProgressBar) Finish() error {
 	p.lock.Lock()
 	p.state.currentNum = p.config.max
+	p.state.lastShown = time.Time{} // re-render regardless of throttling
 	p.lock.Unlock()
 	return p.Add(0)
 }
 
-// Exit will exit the bar to keep current state
-func (p *ProgressBar) Exit() error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	p.state.exit = true
-	if p.config.onCompletion != nil {
-		p.config.onCompletion()
+// Stop stops the progress bar at current state.
+func (p *ProgressBar) Stop() error {
+	if p.config.invisible {
+		return nil
 	}
-	return nil
+	p.lock.Lock()
+	p.state.stopped = true
+	p.state.lastShown = time.Time{} // render regardless of throttling
+	p.lock.Unlock()
+	return p.Add(0)
 }
 
 // Add will add the specified amount to the progressbar
@@ -503,10 +501,6 @@ func (p *ProgressBar) Add64(num int64) error {
 	}
 	p.lock.Lock()
 	defer p.lock.Unlock()
-
-	if p.state.exit {
-		return nil
-	}
 
 	if p.config.max == 0 {
 		return errors.New("max must be greater than 0")
@@ -547,7 +541,7 @@ func (p *ProgressBar) Add64(num int64) error {
 	}
 
 	// always update if show bytes/second or its/second
-	if updateBar || p.config.showIterationsPerSecond || p.config.showIterationsCount {
+	if updateBar || p.config.showIterationsPerSecond || p.config.showIterationsCount || num == 0 {
 		return p.render()
 	}
 
@@ -562,10 +556,14 @@ func (p *ProgressBar) Clear() error {
 // Describe will change the description shown before the progress, which
 // can be changed on the fly (as for a slow running process).
 func (p *ProgressBar) Describe(description string) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	p.config.description = description
 	if p.config.invisible {
 		return
 	}
+	p.state.lastShown = time.Time{} // re-render regardless of throttling
 	p.render()
 }
 
@@ -606,7 +604,7 @@ func (p *ProgressBar) ChangeMax64(newMax int64) {
 	p.Add(0) // re-render
 }
 
-// IsFinished returns true if progress bar is completed
+// IsFinished returns true if progress bar is finished
 func (p *ProgressBar) IsFinished() bool {
 	return p.state.finished
 }
@@ -631,7 +629,7 @@ func (p *ProgressBar) render() error {
 	}
 
 	// check if the progress bar is finished
-	if !p.state.finished && p.state.currentNum >= p.config.max {
+	if !p.state.finished && (p.state.currentNum >= p.config.max || p.state.stopped) {
 		p.state.finished = true
 		if !p.config.clearOnFinish {
 			renderProgressBar(p.config, &p.state)
@@ -692,7 +690,7 @@ func getStringWidth(c config, str string, colorize bool) int {
 
 	// the width of the string, if printed to the console
 	// does not include the carriage return character
-	cleanString := strings.Replace(str, "\r", "", -1)
+	cleanString := strings.ReplaceAll(str, "\r", "")
 
 	if c.colorCodes {
 		// the ANSI codes for the colors do not take up space in the console output,
@@ -700,11 +698,7 @@ func getStringWidth(c config, str string, colorize bool) int {
 		cleanString = ansiRegex.ReplaceAllString(cleanString, "")
 	}
 
-	// get the amount of runes in the string instead of the
-	// character count of the string, as some runes span multiple characters.
-	// see https://stackoverflow.com/a/12668840/2733724
-	stringWidth := runewidth.StringWidth(cleanString)
-	return stringWidth
+	return runewidth.StringWidth(cleanString)
 }
 
 func renderProgressBar(c config, s *state) (int, error) {
