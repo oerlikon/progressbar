@@ -147,9 +147,9 @@ func ExampleDefault() {
 }
 
 func ExampleProgressBar_ChangeMax() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetElapsedTime(false))
-	bar.ChangeMax(50)
+	bar := NewOptions(100, OptionSetWidth(10), OptionSetElapsedTime(false), OptionThrottle(time.Second))
 	bar.Add(50)
+	bar.ChangeMax(50)
 
 	// Output:
 	// 100% |██████████|
@@ -171,7 +171,7 @@ func ExampleOptionShowIts_spinner() {
 	/*
 		Spinner with iteration count and iteration rate
 	*/
-	bar := NewOptions(-1, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
+	bar := NewOptions(-1, OptionShowIts(), OptionShowCount())
 	time.Sleep(1 * time.Second)
 	bar.Add(5)
 
@@ -180,11 +180,7 @@ func ExampleOptionShowIts_spinner() {
 }
 
 func ExampleOptionSpinnerType() {
-	bar := NewOptions(-1,
-		OptionSetWidth(10),
-		OptionSetDescription("Tracing"),
-		OptionShowCount(),
-		OptionSpinnerType(59))
+	bar := NewOptions(-1, OptionSetDescription("Tracing"), OptionShowCount(), OptionSpinnerType(59))
 	time.Sleep(120 * time.Millisecond)
 	bar.Add(11)
 
@@ -192,7 +188,7 @@ func ExampleOptionSpinnerType() {
 	// ..  Tracing (11/?) [0s]
 }
 
-func Test_IsFinished(t *testing.T) {
+func TestIsFinished(t *testing.T) {
 	isCalled := false
 	bar := NewOptions(72, OptionOnCompletion(func() { isCalled = true }))
 
@@ -217,11 +213,21 @@ func Test_IsFinished(t *testing.T) {
 	}
 }
 
+func TestStop(t *testing.T) {
+	isCalled := false
+	bar := NewOptions(72, OptionOnCompletion(func() { isCalled = true }))
+	bar.Add(44)
+	bar.Stop()
+	if !bar.IsFinished() || !isCalled {
+		t.Errorf("bar not finished but it should")
+	}
+}
+
 func ExampleOptionShowBytes_spinner() {
 	/*
 		Spinner with iterations and count
 	*/
-	bar := NewOptions(-1, OptionSetWidth(10), OptionShowBytes(true))
+	bar := NewOptions(-1, OptionShowBytes(true))
 	time.Sleep(1 * time.Second)
 	// since 10 is the width and we don't know the max bytes
 	// it will do a infinite scrolling.
@@ -394,11 +400,10 @@ func TestOptionSetElapsedTime(t *testing.T) {
 func TestOptionSetElapsedTime_spinner(t *testing.T) {
 	buf := strings.Builder{}
 	bar := NewOptions(-1,
-		OptionSetWidth(10),
-		OptionSetWriter(&buf),
+		OptionSetElapsedTime(false),
 		OptionShowIts(),
 		OptionShowCount(),
-		OptionSetElapsedTime(false))
+		OptionSetWriter(&buf))
 	time.Sleep(1 * time.Second)
 	bar.Add(5)
 	result := strings.TrimSpace(buf.String())
