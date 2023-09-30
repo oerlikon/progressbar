@@ -155,10 +155,10 @@ func ExampleDefault() {
 	//
 }
 
-func ExampleProgressBar_ChangeMax() {
+func ExampleProgressBar_SetMax() {
 	bar := NewOptions(100, OptionSetWidth(10), OptionSetElapsedTime(false), OptionThrottle(time.Second))
 	bar.Add(50)
-	bar.ChangeMax(50)
+	bar.SetMax(50)
 
 	// Output:
 	// 100% |██████████|
