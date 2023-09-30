@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,8 +16,24 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func BenchmarkRender(b *testing.B) {
-	bar := NewOptions64(100000000, OptionSetWriter(os.Stderr), OptionShowIts())
+func TestMain(m *testing.M) {
+	termWidth = func() (int, error) {
+		return 0, os.ErrPermission
+	}
+	os.Exit(m.Run())
+}
+
+func BenchmarkRenderSimple(b *testing.B) {
+	bar := NewOptions64(1e8, OptionSetWriter(io.Discard), OptionShowIts(),
+		OptionSetDescription("£"))
+	for i := 0; i < b.N; i++ {
+		bar.Add(1)
+	}
+}
+
+func BenchmarkRenderTricky(b *testing.B) {
+	bar := NewOptions64(1e8, OptionSetWriter(io.Discard), OptionShowIts(),
+		OptionSetDescription("这是一个つの测试"))
 	for i := 0; i < b.N; i++ {
 		bar.Add(1)
 	}
@@ -27,6 +42,7 @@ func BenchmarkRender(b *testing.B) {
 func ExampleProgressBar() {
 	bar := New(100)
 	bar.Add(10)
+
 	// Output:
 	// 10% |████                                    |  [0s:0s]
 }
@@ -34,6 +50,7 @@ func ExampleProgressBar() {
 func ExampleProgressBar_Set() {
 	bar := New(100)
 	bar.Set(10)
+
 	// Output:
 	// 10% |████                                    |  [0s:0s]
 }
@@ -41,99 +58,90 @@ func ExampleProgressBar_Set() {
 func ExampleProgressBar_Set64() {
 	bar := New(100)
 	bar.Set64(10)
+
 	// Output:
 	// 10% |████                                    |  [0s:0s]
 }
 
 func ExampleProgressBar_basic() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false))
+	bar := NewOptions(100, OptionSetWidth(10))
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
+
 	// Output:
 	// 10% |█         |  [1s:9s]
 }
 
 func ExampleProgressBar_invisible() {
-	bar := NewOptions(100,
-		OptionSetWidth(10),
-		OptionSetRenderBlankState(false),
-		OptionSetVisibility(false))
-	bar.RenderBlank()
+	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(true), OptionSetVisibility(false))
 	fmt.Println("hello, world")
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
+
 	// Output:
 	// hello, world
 }
 
 func ExampleOptionThrottle() {
-	bar := NewOptions(100,
-		OptionSetWidth(10),
-		OptionSetRenderBlankState(false),
-		OptionThrottle(100*time.Millisecond))
+	bar := NewOptions(100, OptionSetWidth(10), OptionThrottle(100*time.Millisecond))
 	bar.Add(5)
 	time.Sleep(150 * time.Millisecond)
 	bar.Add(5)
 	bar.Add(10)
+
 	// Output:
 	// 10% |█         |  [0s:1s]
 }
 
 func ExampleOptionClearOnFinish() {
-	bar := NewOptions(100,
-		OptionSetWidth(10),
-		OptionSetRenderBlankState(false),
-		OptionClearOnFinish())
+	bar := NewOptions(100, OptionSetWidth(10), OptionClearOnFinish())
 	bar.Finish()
 	fmt.Println("Finished")
+
 	// Output:
 	// Finished
 }
 
 func ExampleProgressBar_Finish() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false))
+	bar := NewOptions(100, OptionSetWidth(10), OptionSetElapsedTime(false))
 	bar.Finish()
+
 	// Output:
 	// 100% |██████████|
 }
 
 func Example_xOutOfY() {
 	bar := NewOptions(100, OptionSetPredictTime(true))
-
 	for i := 0; i < 100; i++ {
 		bar.Add(1)
 		time.Sleep(1 * time.Millisecond)
 	}
 }
 
-func ExampleOptionShowIts() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionSetPredictTime(false))
+func ExampleOptionShowIts_count() {
+	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
-	// Output:
-	// 10% |█         | (10 it/s)
-}
 
-func ExampleOptionShowCount() {
-	bar := NewOptions(10000, OptionSetWidth(10), OptionShowCount(), OptionSetPredictTime(false))
-	bar.Add(10)
-	// Output:
-	// 0% |          | (10/10000)
-}
-
-func ExampleOptionShowCount_withIts() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionShowCount(), OptionShowIts())
-	time.Sleep(1 * time.Second)
-	bar.Add(10)
 	// Output:
 	// 10% |█         | (10/100, 10 it/s) [1s:9s]
 }
 
-func ExampleOptionSetPredictTime() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetPredictTime(false))
-	_ = bar.Add(10)
+func ExampleOptionShowIts() {
+	bar := NewOptions(100, OptionSetWidth(10), OptionShowIts(), OptionSetElapsedTime(false))
+	time.Sleep(1 * time.Second)
+	bar.Add(10)
+
 	// Output:
-	// 10% |█         |
+	// 10% |█         | (10 it/s)
+}
+
+func ExampleOptionShowCount_minuscule() {
+	bar := NewOptions(10000, OptionSetWidth(10), OptionShowCount(), OptionSetElapsedTime(false))
+	bar.Add(1)
+
+	// Output:
+	// 0% |          | (1/10000)
 }
 
 func ExampleDefault() {
@@ -142,57 +150,67 @@ func ExampleDefault() {
 		bar.Add(1)
 		time.Sleep(10 * time.Millisecond)
 	}
+
 	// Output:
 	//
 }
 
-func ExampleProgressBar_ChangeMax() {
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetPredictTime(false))
-	bar.ChangeMax(50)
+func ExampleProgressBar_SetMax() {
+	bar := NewOptions(100, OptionSetWidth(10), OptionSetElapsedTime(false), OptionThrottle(time.Second))
 	bar.Add(50)
+	bar.SetMax(50)
+
 	// Output:
 	// 100% |██████████|
 }
 
-func ExampleOptionShowIts_spinner() {
-	bar := NewOptions(-1, OptionSetWidth(10), OptionShowIts(), OptionShowCount())
+func ExampleOptionSetDescription_spinner() {
+	/*
+		Spinner with description and iteration count
+	*/
+	bar := NewOptions(-1, OptionSetDescription("Spinning"), OptionShowCount())
 	time.Sleep(1 * time.Second)
 	bar.Add(5)
 
 	// Output:
-	// - (5/?, 5 it/s)
+	// - Spinning (5/?) [1s]
 }
 
-func TestSpinnerType(t *testing.T) {
-	bar := NewOptions(-1,
-		OptionSetWidth(10),
-		OptionSetDescription("indeterminate spinner"),
-		OptionShowIts(),
-		OptionShowCount(),
-		OptionSpinnerType(9))
-	for i := 0; i < 10; i++ {
-		time.Sleep(120 * time.Millisecond)
-		bar.Add(1)
-	}
-	if false {
-		t.Errorf("error")
-	}
+func ExampleOptionShowIts_spinner() {
+	/*
+		Spinner with iteration count and iteration rate
+	*/
+	bar := NewOptions(-1, OptionShowIts(), OptionShowCount())
+	time.Sleep(1 * time.Second)
+	bar.Add(5)
+
+	// Output:
+	// - (5/?, 5 it/s) [1s]
 }
 
-func Test_IsFinished(t *testing.T) {
+func ExampleOptionSpinnerType() {
+	bar := NewOptions(-1, OptionSetDescription("Tracing"), OptionShowCount(), OptionSpinnerType(59))
+	time.Sleep(120 * time.Millisecond)
+	bar.Add(11)
+
+	// Output:
+	// ..  Tracing (11/?) [0s]
+}
+
+func TestIsFinished(t *testing.T) {
 	isCalled := false
 	bar := NewOptions(72, OptionOnCompletion(func() { isCalled = true }))
 
 	// Test1: If bar is not fully completed.
 	bar.Add(5)
 	if bar.IsFinished() || isCalled {
-		t.Errorf("Successfully tested bar is not yet finished.")
+		t.Errorf("bar finished but it shouldn't")
 	}
 
 	// Test2: Bar fully completed.
 	bar.Add(67)
 	if !bar.IsFinished() || !isCalled {
-		t.Errorf("Successfully tested bar is finished.")
+		t.Errorf("bar not finished but it should")
 	}
 
 	// Test3: If increases maximum bytes error should be thrown and
@@ -200,20 +218,32 @@ func Test_IsFinished(t *testing.T) {
 	bar.Reset()
 	err := bar.Add(73)
 	if err == nil || bar.IsFinished() {
-		t.Errorf("Successfully got error when bytes increases max bytes, bar finished: %v", bar.IsFinished())
+		t.Errorf("no error when bytes increases over max bytes or bar finished: %v", bar.IsFinished())
+	}
+}
+
+func TestStop(t *testing.T) {
+	isCalled := false
+	bar := NewOptions(72, OptionOnCompletion(func() { isCalled = true }))
+	bar.Add(44)
+	bar.Stop()
+	if !bar.IsFinished() || !isCalled {
+		t.Errorf("bar not finished but it should")
 	}
 }
 
 func ExampleOptionShowBytes_spinner() {
-	bar := NewOptions(-1, OptionSetWidth(10), OptionShowBytes(true))
-
+	/*
+		Spinner with iterations and count
+	*/
+	bar := NewOptions(-1, OptionShowBytes(true))
 	time.Sleep(1 * time.Second)
 	// since 10 is the width and we don't know the max bytes
 	// it will do a infinite scrolling.
 	bar.Add(11)
 
 	// Output:
-	// - (0.011 kB/s)
+	// - (11 B/s) [1s]
 }
 
 func TestBarSlowAdd(t *testing.T) {
@@ -230,8 +260,6 @@ func TestBarSlowAdd(t *testing.T) {
 	if !strings.Contains(buf.String(), "[3s:") {
 		t.Errorf("wrong string: %s", buf.String())
 	}
-	// Output:
-	// 1% |          | (20 it/min) [3s:4m57s]
 }
 
 func TestBarSmallBytes(t *testing.T) {
@@ -253,6 +281,20 @@ func TestBarSmallBytes(t *testing.T) {
 		bar.Add(1000000)
 	}
 	if !strings.Contains(buf.String(), "9.0/100 MB") {
+		t.Errorf("wrong string: %s", buf.String())
+	}
+}
+
+func TestBarFastBytes(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions64(1e8,
+		OptionShowBytes(true),
+		OptionShowCount(),
+		OptionSetWidth(10),
+		OptionSetWriter(&buf))
+	time.Sleep(time.Millisecond)
+	bar.Add(2e7)
+	if !strings.Contains(buf.String(), " GB/s)") {
 		t.Errorf("wrong string: %s", buf.String())
 	}
 }
@@ -280,30 +322,28 @@ func TestState(t *testing.T) {
 
 func ExampleOptionSetRenderBlankState() {
 	NewOptions(10, OptionSetWidth(10), OptionSetRenderBlankState(true))
+
 	// Output:
 	// 0% |          |  [0s:0s]
 }
 
 func TestBasicSets(t *testing.T) {
-	b := NewOptions(
-		999,
-		OptionSetWidth(888),
+	b := NewOptions(333,
+		OptionSetWidth(222),
 		OptionSetRenderBlankState(true),
-		OptionSetWriter(io.Discard), // suppressing output for this test
-	)
+		OptionSetWriter(io.Discard)) // suppressing output for this test
 
 	tc := b.config
 
-	if tc.max != 999 {
-		t.Errorf("Expected %s to be %d, instead I got %d\n%+v", "max", 999, tc.max, b)
+	if tc.max != 333 {
+		t.Errorf("Expected %s to be %d, instead I got %d\n%+v", "max", 333, tc.max, b)
 	}
-
-	if tc.width != 888 {
-		t.Errorf("Expected %s to be %d, instead I got %d\n%+v", "width", 999, tc.max, b)
+	if tc.width != 222 {
+		t.Errorf("Expected %s to be %d, instead I got %d\n%+v", "width", 222, tc.max, b)
 	}
-
 	if !tc.renderWithBlankState {
-		t.Errorf("Expected %s to be %t, instead I got %t\n%+v", "renderWithBlankState", true, tc.renderWithBlankState, b)
+		t.Errorf("Expected %s to be %t, instead I got %t\n%+v",
+			"renderWithBlankState", true, tc.renderWithBlankState, b)
 	}
 }
 
@@ -326,11 +366,14 @@ func TestOptionSetTheme(t *testing.T) {
 // time in seconds is specified.
 func TestOptionSetPredictTime(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(10, OptionSetPredictTime(false), OptionSetWidth(10), OptionSetWriter(&buf))
+	bar := NewOptions(10,
+		OptionSetPredictTime(false),
+		OptionSetWidth(10),
+		OptionSetWriter(&buf))
 
-	_ = bar.Add(2)
+	bar.Add(2)
 	result := strings.TrimSpace(buf.String())
-	expect := "20% |██        |"
+	expect := "20% |██        |  [0s]"
 
 	if result != expect {
 		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
@@ -340,10 +383,40 @@ func TestOptionSetPredictTime(t *testing.T) {
 	bar.config.predictTime = true
 	buf.Reset()
 
-	_ = bar.Add(7)
+	bar.Add(7)
 	result = strings.TrimSpace(buf.String())
 	expect = "70% |███████   |  [0s:0s]"
 
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
+func TestOptionSetElapsedTime(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions(10,
+		OptionSetElapsedTime(false),
+		OptionSetWidth(10),
+		OptionSetWriter(&buf))
+	bar.Add(2)
+	result := strings.TrimSpace(buf.String())
+	expect := "20% |██        |"
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
+func TestOptionSetElapsedTime_spinner(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions(-1,
+		OptionSetElapsedTime(false),
+		OptionShowIts(),
+		OptionShowCount(),
+		OptionSetWriter(&buf))
+	time.Sleep(1 * time.Second)
+	bar.Add(5)
+	result := strings.TrimSpace(buf.String())
+	expect := "- (5/?, 5 it/s)"
 	if result != expect {
 		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
 	}
@@ -542,17 +615,114 @@ func md5sum(r io.Reader) (string, error) {
 
 func TestProgressBar_Describe(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(100, OptionSetWidth(10), OptionSetRenderBlankState(false), OptionSetWriter(&buf))
+	bar := NewOptions(100, OptionSetWidth(10), OptionSetWriter(&buf))
 	bar.Describe("performing axial adjustments")
 	bar.Add(10)
-	expected := "\r\r" +
+	result := buf.String()
+	expect := "" +
 		"\rperforming axial adjustments   0% |          |  [0s:0s] " +
 		"\r                                                        \r" +
 		"\rperforming axial adjustments  10% |█         |  [0s:0s] "
-	if s := buf.String(); s != expected {
-		fmt.Println()
-		fmt.Println("Produced:", strconv.QuoteToASCII(s))
-		fmt.Println("Expected:", strconv.QuoteToASCII(expected))
-		t.Errorf("Expected output mismatch")
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
+func TestRenderBlankStateWithThrottle(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions(100,
+		OptionSetWidth(10),
+		OptionSetRenderBlankState(true),
+		OptionThrottle(time.Millisecond),
+		OptionSetWriter(&buf))
+	result := strings.TrimSpace(buf.String())
+	expect := "0% |          |  [0s:0s]"
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
+func TestOptionFullWidth(t *testing.T) {
+	var tests = []struct {
+		opts     []Option
+		expected string
+	}{
+		{ // 1
+			[]Option{},
+			"" +
+				"\r  10% |██████                                                       |  [1s:9s] " +
+				"\r                                                                               \r" +
+				"\r 100% |█████████████████████████████████████████████████████████████|  [2s] ",
+		},
+		{ // 2
+			[]Option{OptionSetDescription("Progress:")},
+			"" +
+				"\rProgress:  10% |█████                                               |  [1s:9s] " +
+				"\r                                                                               \r" +
+				"\rProgress: 100% |████████████████████████████████████████████████████|  [2s] ",
+		},
+		{ // 3
+			[]Option{OptionSetPredictTime(false)},
+			"" +
+				"\r  10% |██████                                                          |  [1s] " +
+				"\r                                                                               \r" +
+				"\r 100% |████████████████████████████████████████████████████████████████|  [2s] ",
+		},
+		{ // 4
+			[]Option{OptionSetPredictTime(false), OptionSetElapsedTime(false)},
+			"" +
+				"\r  10% |██████                                                               |  " +
+				"\r                                                                               \r" +
+				"\r 100% |█████████████████████████████████████████████████████████████████████|  ",
+		},
+		{ // 5
+			[]Option{OptionShowIts()},
+			"" +
+				"\r  10% |█████                                               | (10 it/s) [1s:9s] " +
+				"\r                                                                               \r" +
+				"\r 100% |████████████████████████████████████████████████████| (50 it/s) [2s] ",
+		},
+		{ // 6
+			[]Option{OptionShowCount()},
+			"" +
+				"\r  10% |█████                                                | (10/100) [1s:9s] " +
+				"\r                                                                               \r" +
+				"\r 100% |████████████████████████████████████████████████████| (100/100) [2s] ",
+		},
+		{ // 7
+			[]Option{OptionSetDescription("Progress:"), OptionShowIts(), OptionShowCount()},
+			"" +
+				"\rProgress:  10% |███                                | (10/100, 10 it/s) [1s:9s] " +
+				"\r                                                                               \r" +
+				"\rProgress: 100% |██████████████████████████████████| (100/100, 50 it/s) [2s] ",
+		},
+		{ // 8
+			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false)},
+			"" +
+				"\r  10% |████                                           | (10/100, 10 it/s) [1s] " +
+				"\r                                                                               \r" +
+				"\r 100% |██████████████████████████████████████████████| (100/100, 50 it/s) [2s] ",
+		},
+		{ // 9
+			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false), OptionSetElapsedTime(false)},
+			"" +
+				"\r  10% |█████                                               | (10/100, 10 it/s) " +
+				"\r                                                                               \r" +
+				"\r 100% |███████████████████████████████████████████████████| (100/100, 50 it/s) ",
+		},
+	}
+
+	for i, test := range tests {
+		test := test
+		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
+			t.Parallel()
+			buf := strings.Builder{}
+			bar := NewOptions(100, append(test.opts, []Option{OptionFullWidth(), OptionSetWriter(&buf)}...)...)
+			time.Sleep(1 * time.Second)
+			bar.Add(10)
+			time.Sleep(1 * time.Second)
+			bar.Add(90)
+			assert.Equal(t, test.expected, buf.String())
+		})
 	}
 }

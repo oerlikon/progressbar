@@ -1,4 +1,5 @@
-name: CI
+name: build
+
 on:
   push:
     branches: [patch]
@@ -6,14 +7,19 @@ on:
     branches: [patch]
 
 jobs:
-  unit-tests:
-    name: Audit
-    runs-on: ubuntu-latest
+  audit:
+    strategy:
+      matrix:
+        go: [1.19.x, 1.20.x, 1.21.x]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-    - uses: actions/setup-go@v3
-      with:
-        go-version: '1.18'
-    - uses: actions/checkout@v3
-    - run: go version
-    - run: go vet .
-    - run: go test -v -cover -vet=off .
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go vet ./...
+      - run: go test -vet=off ./...
+      - uses: dominikh/staticcheck-action@v1.3.0
+        with:
+          install-go: false
