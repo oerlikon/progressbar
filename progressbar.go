@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mitchellh/colorstring"
 	"github.com/rivo/uniseg"
@@ -94,7 +95,7 @@ type config struct {
 	// clear bar once finished or stopped
 	clearOnFinish bool
 
-	// spinnerType should be a number between 0-75
+	// spinnerType should be a key from the spinners map
 	spinnerType int
 
 	// fullWidth specifies whether to measure and set the bar to a specific width
@@ -107,6 +108,9 @@ type config struct {
 
 	// whether the render function should make use of ANSI codes to reduce console I/O
 	useANSICodes bool
+
+	// whether the getStringWidth function should be more rigorous
+	trickyWidths bool
 }
 
 // Theme defines the elements of the bar
@@ -140,6 +144,7 @@ func OptionSetWidth(s int) Option {
 func OptionSpinnerType(spinnerType int) Option {
 	return func(p *ProgressBar) {
 		p.config.spinnerType = spinnerType
+		p.checkTrickyWidths()
 	}
 }
 
@@ -147,6 +152,7 @@ func OptionSpinnerType(spinnerType int) Option {
 func OptionSetTheme(t Theme) Option {
 	return func(p *ProgressBar) {
 		p.config.theme = t
+		p.checkTrickyWidths()
 	}
 }
 
@@ -182,6 +188,7 @@ func OptionSetRenderBlankState(r bool) Option {
 func OptionSetDescription(description string) Option {
 	return func(p *ProgressBar) {
 		p.config.description = description
+		p.checkTrickyWidths()
 	}
 }
 
@@ -228,6 +235,7 @@ func OptionShowIts() Option {
 func OptionSetItsString(iterationString string) Option {
 	return func(p *ProgressBar) {
 		p.config.iterationString = iterationString
+		p.checkTrickyWidths()
 	}
 }
 
@@ -316,6 +324,8 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 	}
 
 	b.config.maxHumanized, b.config.maxHumanizedSuffix = humanizeBytes(float64(b.config.max))
+
+	b.checkTrickyWidths()
 
 	if b.config.renderWithBlankState {
 		b.RenderBlank()
@@ -563,6 +573,7 @@ func (p *ProgressBar) Describe(description string) {
 	defer p.lock.Unlock()
 
 	p.config.description = description
+	p.checkTrickyWidths()
 	if p.config.invisible {
 		return
 	}
@@ -670,6 +681,30 @@ func (p *ProgressBar) render() error {
 	return nil
 }
 
+// checkTrickyWidths checks if any progress bar element's width in screen characters
+// is different from the number of runes in it, and updates the relevant config variable.
+func (p *ProgressBar) checkTrickyWidths() {
+	var parts = []string{
+		p.config.description,
+		p.config.iterationString,
+		p.config.theme.Saucer,
+		p.config.theme.SaucerHead,
+		p.config.theme.SaucerPadding,
+		p.config.theme.BarStart,
+		p.config.theme.BarEnd,
+	}
+	if p.config.ignoreLength {
+		parts = append(parts, spinners[p.config.spinnerType]...)
+	}
+	for _, s := range parts {
+		if uniseg.StringWidth(s) != utf8.RuneCountInString(s) {
+			p.config.trickyWidths = true
+			return
+		}
+	}
+	p.config.trickyWidths = false
+}
+
 // State returns the current state
 func (p *ProgressBar) State() State {
 	p.lock.Lock()
@@ -704,7 +739,10 @@ func getStringWidth(c config, str string, colorize bool) int {
 		cleanString = ansiRegex.ReplaceAllString(cleanString, "")
 	}
 
-	return uniseg.StringWidth(cleanString)
+	if c.trickyWidths {
+		return uniseg.StringWidth(cleanString)
+	}
+	return utf8.RuneCountInString(cleanString)
 }
 
 func renderProgressBar(c config, s *state) (int, error) {
