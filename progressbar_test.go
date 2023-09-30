@@ -23,8 +23,17 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func BenchmarkRender(b *testing.B) {
-	bar := NewOptions64(1e8, OptionSetWriter(os.Stderr), OptionShowIts())
+func BenchmarkRenderSimple(b *testing.B) {
+	bar := NewOptions64(1e8, OptionSetWriter(io.Discard), OptionShowIts(),
+		OptionSetDescription("£"))
+	for i := 0; i < b.N; i++ {
+		bar.Add(1)
+	}
+}
+
+func BenchmarkRenderTricky(b *testing.B) {
+	bar := NewOptions64(1e8, OptionSetWriter(io.Discard), OptionShowIts(),
+		OptionSetDescription("这是一个つの测试"))
 	for i := 0; i < b.N; i++ {
 		bar.Add(1)
 	}
