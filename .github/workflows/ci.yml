@@ -2,9 +2,9 @@ name: build
 
 on:
   push:
-    branches: [patch]
+    branches: [sideline, patch]
   pull_request:
-    branches: [patch]
+    branches: [sideline, patch]
 
 jobs:
   audit:
