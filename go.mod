@@ -1,4 +1,4 @@
-module github.com/schollz/progressbar/v3
+module github.com/oerlikon/progressbar/v3
 
 go 1.19
 
