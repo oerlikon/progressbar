@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 }
 
 func BenchmarkRenderSimple(b *testing.B) {
-	bar := NewOptions64(1e8, OptionWriter(io.Discard), OptionShowIts(),
+	bar := New64(1e8, OptionWriter(io.Discard), OptionShowIts(),
 		OptionDescription("£"))
 	for i := 0; i < b.N; i++ {
 		bar.Add(1)
@@ -32,7 +32,7 @@ func BenchmarkRenderSimple(b *testing.B) {
 }
 
 func BenchmarkRenderTricky(b *testing.B) {
-	bar := NewOptions64(1e8, OptionWriter(io.Discard), OptionShowIts(),
+	bar := New64(1e8, OptionWriter(io.Discard), OptionShowIts(),
 		OptionDescription("这是一个つの测试"))
 	for i := 0; i < b.N; i++ {
 		bar.Add(1)
@@ -40,7 +40,7 @@ func BenchmarkRenderTricky(b *testing.B) {
 }
 
 func TestIsFinished(t *testing.T) {
-	bar := NewOptions(72)
+	bar := New(72)
 
 	// Test1: If bar is not fully completed.
 	bar.Add(5)
@@ -64,7 +64,7 @@ func TestIsFinished(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	bar := NewOptions(72)
+	bar := New(72)
 	bar.Add(44)
 	bar.Stop()
 	if !bar.IsFinished() {
@@ -74,7 +74,7 @@ func TestStop(t *testing.T) {
 
 func TestBarSlowAdd(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(100,
+	bar := New(100,
 		OptionWidth(10),
 		OptionShowIts(),
 		OptionShowRemaining(),
@@ -94,7 +94,7 @@ func TestBarSlowAdd(t *testing.T) {
 
 func TestBarSmallBytes(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions64(100000000,
+	bar := New64(100000000,
 		OptionShowBytes(),
 		OptionShowCount(),
 		OptionWidth(10),
@@ -117,7 +117,7 @@ func TestBarSmallBytes(t *testing.T) {
 
 func TestBarFastBytes(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions64(1e8,
+	bar := New64(1e8,
 		OptionShowBytes(),
 		OptionShowCount(),
 		OptionWidth(10),
@@ -141,7 +141,7 @@ func TestBar(t *testing.T) {
 }
 
 func TestState(t *testing.T) {
-	bar := NewOptions(100, OptionWidth(10))
+	bar := New(100, OptionWidth(10))
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	s := bar.State()
@@ -151,7 +151,7 @@ func TestState(t *testing.T) {
 }
 
 func TestBasicSets(t *testing.T) {
-	b := NewOptions(333, OptionWidth(222), OptionWriter(io.Discard))
+	b := New(333, OptionWidth(222), OptionWriter(io.Discard))
 
 	tc := b.config
 
@@ -165,7 +165,7 @@ func TestBasicSets(t *testing.T) {
 
 func TestOptionTheme(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(10,
+	bar := New(10,
 		OptionTheme(Theme{
 			Saucer:        "#",
 			SaucerPadding: "-",
@@ -185,7 +185,7 @@ func TestOptionTheme(t *testing.T) {
 
 func TestElapsed(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(10,
+	bar := New(10,
 		OptionWidth(10),
 		OptionShowElapsed(),
 		OptionWriter(&buf))
@@ -199,7 +199,7 @@ func TestElapsed(t *testing.T) {
 
 func TestOptionElapsed_spinner(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(-1,
+	bar := New(-1,
 		OptionShowElapsed(),
 		OptionShowIts(),
 		OptionShowCount(),
@@ -215,7 +215,7 @@ func TestOptionElapsed_spinner(t *testing.T) {
 
 func TestEstimated(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(10,
+	bar := New(10,
 		OptionWidth(10),
 		OptionShowRemaining(),
 		OptionWriter(&buf))
@@ -229,7 +229,7 @@ func TestEstimated(t *testing.T) {
 }
 
 func TestSpinnerState(t *testing.T) {
-	bar := NewOptions(-1, OptionWidth(100))
+	bar := New(-1, OptionWidth(100))
 	time.Sleep(1 * time.Second)
 	bar.Add(10)
 
@@ -260,7 +260,7 @@ func TestReaderToBuffer(t *testing.T) {
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
-	bar := NewOptions(int(resp.ContentLength), OptionShowBytes())
+	bar := New(int(resp.ContentLength), OptionShowBytes())
 	out := io.MultiWriter(buf, bar)
 	_, err = io.Copy(out, resp.Body)
 	assert.Nil(t, err)
@@ -380,7 +380,7 @@ func TestReaderToFileUnknownLength(t *testing.T) {
 
 func TestConcurrency(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(1000, OptionWriter(&buf))
+	bar := New(1000, OptionWriter(&buf))
 	var wg sync.WaitGroup
 	for i := 0; i < 900; i++ {
 		wg.Add(1)
@@ -405,7 +405,7 @@ func TestIterationNames(t *testing.T) {
 	}
 
 	// Change the default "it/s" to provide context, downloads per second or "dl/s"
-	b = NewOptions(20, OptionItsString("dl"))
+	b = New(20, OptionItsString("dl"))
 	tc = b.config
 
 	if tc.iterationString != "dl" {
@@ -421,7 +421,7 @@ func md5sum(r io.Reader) (string, error) {
 
 func TestSetDescription(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(100, OptionWidth(10), OptionShowRemaining(), OptionWriter(&buf))
+	bar := New(100, OptionWidth(10), OptionShowRemaining(), OptionWriter(&buf))
 	bar.SetDescription("performing axial adjustments")
 	bar.Add(10)
 	result := buf.String()
@@ -438,7 +438,7 @@ func TestSetDescription(t *testing.T) {
 
 func TestRenderBlankStateWithThrottle(t *testing.T) {
 	buf := strings.Builder{}
-	bar := NewOptions(100,
+	bar := New(100,
 		OptionWidth(10),
 		OptionShowRemaining(),
 		OptionThrottle(time.Millisecond),
@@ -543,7 +543,7 @@ func TestOptionFullWidth(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
 			buf := strings.Builder{}
-			bar := NewOptions(100, append(test.opts, []Option{OptionFullWidth(), OptionWriter(&buf)}...)...)
+			bar := New(100, append(test.opts, []Option{OptionFullWidth(), OptionWriter(&buf)}...)...)
 			time.Sleep(1 * time.Second)
 			bar.Add(10)
 			time.Sleep(1 * time.Second)
@@ -563,7 +563,7 @@ func TestSpinners(t *testing.T) {
 			"" +
 				"\r | " +
 				"\r   \r" +
-				"\r - " +
+				"\r / " +
 				"\r   \r" +
 				"\r100% \n",
 		},
@@ -572,7 +572,7 @@ func TestSpinners(t *testing.T) {
 			"" +
 				"\r | Spinning " +
 				"\r            \r" +
-				"\r - Spinning " +
+				"\r / Spinning " +
 				"\r            \r" +
 				"\r100% Spinning \n",
 		},
@@ -581,45 +581,45 @@ func TestSpinners(t *testing.T) {
 			"" +
 				"\r | [0s] " +
 				"\r        \r" +
-				"\r - [1s] " +
+				"\r / [0s] " +
 				"\r        \r" +
-				"\r100% [2s] \n",
+				"\r100% [1s] \n",
 		},
 		{ // 4
 			[]Option{OptionShowIts(), OptionShowElapsed()},
 			"" +
 				"\r | (0 it/s) [0s] " +
 				"\r                 \r" +
-				"\r - (60 it/min) [1s] " +
-				"\r                    \r" +
-				"\r100% (30 it/min) [2s] \n",
+				"\r / (1 it/s) [0s] " +
+				"\r                 \r" +
+				"\r100% (33 it/min) [1s] \n",
 		},
 		{ // 5
 			[]Option{OptionShowCount(), OptionShowElapsed()},
 			"" +
 				"\r | (0/?) [0s] " +
 				"\r              \r" +
-				"\r - (1/?) [1s] " +
+				"\r / (1/?) [0s] " +
 				"\r              \r" +
-				"\r100% (1/1) [2s] \n",
+				"\r100% (1/1) [1s] \n",
 		},
 		{ // 6
 			[]Option{OptionDescription("Throbbing"), OptionShowIts(), OptionShowCount(), OptionShowElapsed()},
 			"" +
 				"\r | Throbbing (0/?, 0 it/s) [0s] " +
 				"\r                                \r" +
-				"\r - Throbbing (1/?, 60 it/min) [1s] " +
-				"\r                                   \r" +
-				"\r100% Throbbing (1/1, 30 it/min) [2s] \n",
+				"\r / Throbbing (1/?, 1 it/s) [0s] " +
+				"\r                                \r" +
+				"\r100% Throbbing (1/1, 33 it/min) [1s] \n",
 		},
 		{ // 7
-			[]Option{OptionShowIts(), OptionItsString("deg"), OptionSpinnerType(59)},
+			[]Option{OptionShowIts(), OptionItsString("deg"), OptionSpinnerStyle(59)},
 			"" +
 				"\r .   (0 deg/s) " +
 				"\r               \r" +
-				"\r   . (60 deg/min) " +
-				"\r                  \r" +
-				"\r100% (30 deg/min) \n",
+				"\r  .: (1 deg/s) " +
+				"\r               \r" +
+				"\r100% (33 deg/min) \n",
 		},
 	}
 
@@ -628,10 +628,10 @@ func TestSpinners(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
 			buf := strings.Builder{}
-			spinner := NewOptions(-1, append(test.opts, []Option{OptionWriter(&buf)}...)...)
-			time.Sleep(1 * time.Second)
+			spinner := New(-1, append(test.opts, []Option{OptionWriter(&buf)}...)...)
+			time.Sleep(900 * time.Millisecond)
 			spinner.Add(1)
-			time.Sleep(1 * time.Second)
+			time.Sleep(900 * time.Millisecond)
 			spinner.Finish()
 			assert.Equal(t, test.expected, buf.String())
 		})
