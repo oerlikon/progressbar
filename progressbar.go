@@ -27,7 +27,7 @@ type ProgressBar struct {
 	lock   sync.Mutex
 }
 
-// State is a summary of a progress bar's current position.
+// State is a summary of progress bar's current position.
 type State struct {
 	CurrentPercent float64
 	CurrentBytes   float64
@@ -132,14 +132,14 @@ var spinners = map[int][]string{
 // Option is the general type for progress bar customization options.
 type Option func(p *ProgressBar)
 
-// OptionWidth sets the width of the progress bar.
+// OptionWidth sets progress bar width.
 func OptionWidth(width int) Option {
 	return func(p *ProgressBar) {
 		p.config.width = width
 	}
 }
 
-// OptionSpinnerStyle sets the visual style of the spinner. Default is 9.
+// OptionSpinnerStyle sets spinner's visual style. Default is 9.
 //
 // Available styles are restricted to 9, 14 and 59.
 func OptionSpinnerStyle(style int) Option {
@@ -149,7 +149,7 @@ func OptionSpinnerStyle(style int) Option {
 	}
 }
 
-// OptionTheme sets the appearance of the elements of the progress bar.
+// OptionTheme sets progress bar's composition elements.
 func OptionTheme(theme Theme) Option {
 	return func(p *ProgressBar) {
 		p.config.theme = theme
@@ -157,29 +157,31 @@ func OptionTheme(theme Theme) Option {
 	}
 }
 
-// OptionFullWidth sets the progress bar to full width of the console.
+// OptionFullWidth makes progress bar use full width of the console.
 func OptionFullWidth() Option {
 	return func(p *ProgressBar) {
 		p.config.fullWidth = true
 	}
 }
 
-// OptionVisible sets whether the bar should be visible.
-// On by default, but can be useful to hide the progress bar when output is redirected etc.
+// OptionVisible sets whether the progress bar is shown in console.
+//
+// On by default, but can be useful to omit progress bar display
+// when output is redirected etc.
 func OptionVisible(show bool) Option {
 	return func(p *ProgressBar) {
 		p.config.visible = show
 	}
 }
 
-// OptionWriter sets the output writer (defaults to os.Stdout).
+// OptionWriter sets progress bar's output writer (defaults to os.Stdout).
 func OptionWriter(w io.Writer) Option {
 	return func(p *ProgressBar) {
 		p.config.writer = w
 	}
 }
 
-// OptionDescription sets the description label of the progress bar.
+// OptionDescription sets progress bar's description label.
 func OptionDescription(s string) Option {
 	return func(p *ProgressBar) {
 		p.config.description = s
@@ -241,14 +243,15 @@ func OptionTotalRate() Option {
 }
 
 // OptionThrottle enables minimum time intervals between refreshing the progress bar.
-// Default is 0 seconds which makes the progress bar refresh on every update.
+//
+// Default interval is zero which makes progress bar refresh on every update.
 func OptionThrottle(interval time.Duration) Option {
 	return func(p *ProgressBar) {
 		p.config.throttleInterval = interval
 	}
 }
 
-// OptionClearOnFinish enables clearing the bar after it's finished or stopped.
+// OptionClearOnFinish makes progress bar disappear after it's finished or stopped.
 func OptionClearOnFinish() Option {
 	return func(p *ProgressBar) {
 		p.config.clearOnFinish = true
@@ -272,13 +275,15 @@ func OptionUseANSICodes() Option {
 }
 
 // New constructs a new instance of ProgressBar with specified options.
-// With max value of -1 it becomes a spinner.
+//
+// With max == -1 it creates a spinner.
 func New(max int, options ...Option) *ProgressBar {
 	return New64(int64(max), options...)
 }
 
 // New64 constructs a new instance of ProgressBar with specified options.
-// With max value of -1 it becomes a spinner.
+//
+// With max == -1 it creates a spinner.
 func New64(max int64, options ...Option) *ProgressBar {
 	b := ProgressBar{
 		state: getBasicState(),
@@ -330,14 +335,11 @@ func getBasicState() state {
 
 // DefaultBytes creates a new ProgressBar for measuring bytes throughput
 // with some reasonable default options.
-// With maxBytes value of -1 it becomes a spinner.
+//
+// With maxBytes == -1 it creates a spinner.
 func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
-	desc := ""
-	if len(description) > 0 {
-		desc = description[0]
-	}
 	return New64(maxBytes,
-		OptionDescription(desc),
+		OptionDescription(strings.Join(description, " ")),
 		OptionWriter(os.Stderr),
 		OptionShowBytes(),
 		OptionWidth(10),
@@ -348,14 +350,11 @@ func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
 }
 
 // Default creates a new ProgressBar with some reasonable default options.
-// With max value of -1 it becomes a spinner.
+//
+// With max == -1 it creates a spinner.
 func Default(max int64, description ...string) *ProgressBar {
-	desc := ""
-	if len(description) > 0 {
-		desc = description[0]
-	}
 	return New64(max,
-		OptionDescription(desc),
+		OptionDescription(strings.Join(description, " ")),
 		OptionWriter(os.Stderr),
 		OptionWidth(10),
 		OptionThrottle(65*time.Millisecond),
@@ -365,7 +364,7 @@ func Default(max int64, description ...string) *ProgressBar {
 		OptionFullWidth())
 }
 
-// String returns the current rendering of the progress bar.
+// String returns progress bar's current rendering.
 func (p *ProgressBar) String() string {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -373,14 +372,14 @@ func (p *ProgressBar) String() string {
 	return p.state.rendered
 }
 
-// Reset resets the progress bar to initial state.
+// Reset resets progress bar to initial state.
 func (p *ProgressBar) Reset() {
 	p.lock.Lock()
 	p.state = getBasicState()
 	p.lock.Unlock()
 }
 
-// Finish fills the bar to full.
+// Finish fills progress bar to full and starts a new line.
 func (p *ProgressBar) Finish() error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -390,7 +389,7 @@ func (p *ProgressBar) Finish() error {
 	return p.add(0)
 }
 
-// Stop stops the progress bar at current state.
+// Stop stops progress bar at current state.
 func (p *ProgressBar) Stop() error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -400,7 +399,7 @@ func (p *ProgressBar) Stop() error {
 	return p.add(0)
 }
 
-// Add adds specified delta to the progressbar current value.
+// Add adds specified delta to progress bar's current value.
 func (p *ProgressBar) Add(delta int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -408,7 +407,7 @@ func (p *ProgressBar) Add(delta int) error {
 	return p.add(int64(delta))
 }
 
-// Add64 adds specified delta to the progressbar current value.
+// Add64 adds specified delta to progress bar's current value.
 func (p *ProgressBar) Add64(delta int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -416,7 +415,7 @@ func (p *ProgressBar) Add64(delta int64) error {
 	return p.add(delta)
 }
 
-// Set sets the progressbar's current value.
+// Set sets progressbar's current value.
 func (p *ProgressBar) Set(value int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -424,7 +423,7 @@ func (p *ProgressBar) Set(value int) error {
 	return p.add(int64(value) - int64(p.state.currentBytes))
 }
 
-// Set64 sets the progressbar's current value.
+// Set64 sets progressbar's current value.
 func (p *ProgressBar) Set64(value int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -487,7 +486,7 @@ func (p *ProgressBar) Clear() error {
 	return clearProgressBar(p.config, p.state)
 }
 
-// SetDescription changes the description label of the progress bar.
+// SetDescription changes progress bar's description label.
 func (p *ProgressBar) SetDescription(s string) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -500,7 +499,7 @@ func (p *ProgressBar) SetDescription(s string) {
 	p.render()
 }
 
-// Max returns the maximum value of the progress bar at which it's considered full.
+// Max returns progress bar's maximum value.
 func (p *ProgressBar) Max() int {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -508,7 +507,7 @@ func (p *ProgressBar) Max() int {
 	return int(p.config.max)
 }
 
-// Max64 returns the maximum value of the progress bar at which it's considered full.
+// Max64 returns progress bar's maximum value.
 func (p *ProgressBar) Max64() int64 {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -516,7 +515,7 @@ func (p *ProgressBar) Max64() int64 {
 	return p.config.max
 }
 
-// AddMax adds specified delta to the maximum value of the progress bar.
+// AddMax adds specified delta to progress bar's maximum value.
 func (p *ProgressBar) AddMax(delta int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -524,7 +523,7 @@ func (p *ProgressBar) AddMax(delta int) error {
 	return p.setMax(p.config.max + int64(delta))
 }
 
-// AddMax64 adds specified delta to the maximum value of the progress bar.
+// AddMax64 adds specified delta to progress bar's maximum value.
 func (p *ProgressBar) AddMax64(delta int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -532,7 +531,7 @@ func (p *ProgressBar) AddMax64(delta int64) error {
 	return p.setMax(p.config.max + delta)
 }
 
-// SetMax sets the maximum value of the progress bar at which it's considered full.
+// SetMax sets progress bar's maximum value at which it's considered full.
 func (p *ProgressBar) SetMax(max int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -540,7 +539,7 @@ func (p *ProgressBar) SetMax(max int) error {
 	return p.setMax(int64(max))
 }
 
-// SetMax64 sets the maximum value of the progress bar at which it's considered full.
+// SetMax64 sets progress bar's maximum value at which it's considered full.
 func (p *ProgressBar) SetMax64(max int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -639,7 +638,7 @@ func (p *ProgressBar) checkTrickyWidths() {
 	p.config.trickyWidths = false
 }
 
-// State returns the current state.
+// State returns progress bar's current state.
 func (p *ProgressBar) State() State {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -920,7 +919,7 @@ type Reader struct {
 	bar *ProgressBar
 }
 
-// NewReader creates a new Reader with a given io.Reader and a progress bar.
+// NewReader creates a new Reader with given io.Reader and progress bar.
 func NewReader(r io.Reader, bar *ProgressBar) Reader {
 	return Reader{
 		r:   r,
@@ -935,7 +934,7 @@ func (r *Reader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// Close closes the embedded reader if it implements io.Closer and fills progress bar to full.
+// Close closes the internal reader if it implements io.Closer and fills progress bar to full.
 func (r *Reader) Close() (err error) {
 	if closer, ok := r.r.(io.Closer); ok {
 		if err := closer.Close(); err != nil {
