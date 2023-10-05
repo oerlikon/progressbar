@@ -91,7 +91,7 @@ type config struct {
 	predictTime bool
 
 	// minimum time to wait in between updates
-	throttleDuration time.Duration
+	throttleInterval time.Duration
 
 	// clear bar once finished or stopped
 	clearOnFinish bool
@@ -126,7 +126,7 @@ var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEn
 var spinners = map[int][]string{
 	9:  {"|", "/", "-", "\\"},
 	14: {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-	59: {".  ", ".. ", "...", " ..", "  .", "   "},
+	59: {".  ", ":. ", ".:.", " .:", "  .", "   "},
 }
 
 // Option is the general type for progress bar customization options.
@@ -139,10 +139,12 @@ func OptionWidth(width int) Option {
 	}
 }
 
-// OptionSpinnerType sets the type of spinner.
-func OptionSpinnerType(spinnerType int) Option {
+// OptionSpinnerStyle sets the visual style of the spinner. Default is 9.
+//
+// Available styles are restricted to 9, 14 and 59.
+func OptionSpinnerStyle(style int) Option {
 	return func(p *ProgressBar) {
-		p.config.spinnerType = spinnerType
+		p.config.spinnerType = style
 		p.checkTrickyWidths()
 	}
 }
@@ -162,11 +164,11 @@ func OptionFullWidth() Option {
 	}
 }
 
-// OptionVisible sets whether the bar should be visible. On by default, but
-// could be useful to hide the progress bar when output is redirected etc.
-func OptionVisible(visible bool) Option {
+// OptionVisible sets whether the bar should be visible.
+// On by default, but can be useful to hide the progress bar when output is redirected etc.
+func OptionVisible(show bool) Option {
 	return func(p *ProgressBar) {
-		p.config.visible = visible
+		p.config.visible = show
 	}
 }
 
@@ -200,6 +202,7 @@ func OptionShowElapsed() Option {
 }
 
 // OptionShowRemaining enables display of estimated remaining time in addition to elapsed time.
+//
 // Has no effect on spinners as their estimated remaining time is unknown.
 func OptionShowRemaining() Option {
 	return func(p *ProgressBar) {
@@ -222,7 +225,7 @@ func OptionShowIts() Option {
 }
 
 // OptionItsString sets what the iterations are called.
-// The default is "it" which would display: "it/s".
+// The default is "it" which would display "it/s".
 func OptionItsString(its string) Option {
 	return func(p *ProgressBar) {
 		p.config.iterationString = its
@@ -230,7 +233,7 @@ func OptionItsString(its string) Option {
 	}
 }
 
-// OptionTotalRate enables plain total rate display instead of recent average rate.
+// OptionTotalRate enables plain total rate display instead of default recent average rate.
 func OptionTotalRate() Option {
 	return func(p *ProgressBar) {
 		p.config.totalRate = true
@@ -239,9 +242,9 @@ func OptionTotalRate() Option {
 
 // OptionThrottle enables minimum time intervals between refreshing the progress bar.
 // Default is 0 seconds which makes the progress bar refresh on every update.
-func OptionThrottle(duration time.Duration) Option {
+func OptionThrottle(interval time.Duration) Option {
 	return func(p *ProgressBar) {
-		p.config.throttleDuration = duration
+		p.config.throttleInterval = interval
 	}
 }
 
@@ -268,13 +271,15 @@ func OptionUseANSICodes() Option {
 	}
 }
 
-// NewOptions constructs a new instance of ProgressBar with specified options.
-func NewOptions(max int, options ...Option) *ProgressBar {
-	return NewOptions64(int64(max), options...)
+// New constructs a new instance of ProgressBar with specified options.
+// With max value of -1 it becomes a spinner.
+func New(max int, options ...Option) *ProgressBar {
+	return New64(int64(max), options...)
 }
 
-// NewOptions64 constructs a new instance of ProgressBar with specified options.
-func NewOptions64(max int64, options ...Option) *ProgressBar {
+// New64 constructs a new instance of ProgressBar with specified options.
+// With max value of -1 it becomes a spinner.
+func New64(max int64, options ...Option) *ProgressBar {
 	b := ProgressBar{
 		state: getBasicState(),
 		config: config{
@@ -283,7 +288,7 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 			iterationString:  "it",
 			width:            40,
 			max:              max,
-			throttleDuration: 0 * time.Nanosecond,
+			throttleInterval: 0 * time.Nanosecond,
 			elapsedTime:      false,
 			predictTime:      false,
 			spinnerType:      9,
@@ -323,80 +328,40 @@ func getBasicState() state {
 	}
 }
 
-// New returns a new ProgressBar with the specified maximum.
-func New(max int) *ProgressBar {
-	return NewOptions(max)
-}
-
-// DefaultBytes provides a ProgressBar to measure byte throughput with recommended defaults.
-// Set maxBytes to -1 to use as a spinner.
+// DefaultBytes creates a new ProgressBar for measuring bytes throughput
+// with some reasonable default options.
+// With maxBytes value of -1 it becomes a spinner.
 func DefaultBytes(maxBytes int64, description ...string) *ProgressBar {
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
 	}
-	return NewOptions64(maxBytes,
+	return New64(maxBytes,
 		OptionDescription(desc),
 		OptionWriter(os.Stderr),
 		OptionShowBytes(),
 		OptionWidth(10),
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
-		OptionSpinnerType(14),
+		OptionSpinnerStyle(14),
 		OptionFullWidth())
 }
 
-// DefaultBytesSilent is the same as DefaultBytes, but does not output anywhere.
-// String() can be used to get the output instead.
-func DefaultBytesSilent(maxBytes int64, description ...string) *ProgressBar {
-	desc := ""
-	if len(description) > 0 {
-		desc = description[0]
-	}
-	return NewOptions64(maxBytes,
-		OptionDescription(desc),
-		OptionWriter(io.Discard),
-		OptionShowBytes(),
-		OptionWidth(10),
-		OptionThrottle(65*time.Millisecond),
-		OptionShowCount(),
-		OptionSpinnerType(14),
-		OptionFullWidth())
-}
-
-// Default provides a ProgressBar with recommended defaults.
-// Set max to -1 to use as a spinner.
+// Default creates a new ProgressBar with some reasonable default options.
+// With max value of -1 it becomes a spinner.
 func Default(max int64, description ...string) *ProgressBar {
 	desc := ""
 	if len(description) > 0 {
 		desc = description[0]
 	}
-	return NewOptions64(max,
+	return New64(max,
 		OptionDescription(desc),
 		OptionWriter(os.Stderr),
 		OptionWidth(10),
 		OptionThrottle(65*time.Millisecond),
 		OptionShowCount(),
 		OptionShowIts(),
-		OptionSpinnerType(14),
-		OptionFullWidth())
-}
-
-// DefaultSilent is the same as Default, but does not output anywhere.
-// String() can be used to get the output instead.
-func DefaultSilent(max int64, description ...string) *ProgressBar {
-	desc := ""
-	if len(description) > 0 {
-		desc = description[0]
-	}
-	return NewOptions64(max,
-		OptionDescription(desc),
-		OptionWriter(io.Discard),
-		OptionWidth(10),
-		OptionThrottle(65*time.Millisecond),
-		OptionShowCount(),
-		OptionShowIts(),
-		OptionSpinnerType(14),
+		OptionSpinnerStyle(14),
 		OptionFullWidth())
 }
 
@@ -451,7 +416,7 @@ func (p *ProgressBar) Add64(delta int64) error {
 	return p.add(delta)
 }
 
-// Set sets the progressbar bar current value.
+// Set sets the progressbar's current value.
 func (p *ProgressBar) Set(value int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -459,7 +424,7 @@ func (p *ProgressBar) Set(value int) error {
 	return p.add(int64(value) - int64(p.state.currentBytes))
 }
 
-// Set64 sets the progressbar bar current value.
+// Set64 sets the progressbar's current value.
 func (p *ProgressBar) Set64(value int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -535,11 +500,6 @@ func (p *ProgressBar) SetDescription(s string) {
 	p.render()
 }
 
-// New64 returns a new ProgressBar with the specified maximum value.
-func New64(max int64) *ProgressBar {
-	return NewOptions64(max)
-}
-
 // Max returns the maximum value of the progress bar at which it's considered full.
 func (p *ProgressBar) Max() int {
 	p.lock.Lock()
@@ -596,7 +556,7 @@ func (p *ProgressBar) setMax(max int64) error {
 	return p.add(0) // re-render
 }
 
-// IsFinished returns true if progress bar is finished.
+// IsFinished reports whether the progress bar is finished.
 func (p *ProgressBar) IsFinished() bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -610,7 +570,7 @@ func (p *ProgressBar) IsFinished() bool {
 func (p *ProgressBar) render() error {
 	// make sure that the rendering is not happening too quickly
 	// but always show if the currentNum reaches the max
-	if time.Since(p.state.lastShown).Nanoseconds() < p.config.throttleDuration.Nanoseconds() &&
+	if time.Since(p.state.lastShown).Nanoseconds() < p.config.throttleInterval.Nanoseconds() &&
 		p.state.currentNum < p.config.max {
 		return nil
 	}
