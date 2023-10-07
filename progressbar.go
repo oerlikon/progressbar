@@ -126,7 +126,7 @@ var defaultTheme = Theme{Saucer: "█", SaucerPadding: " ", BarStart: "|", BarEn
 var spinners = map[int][]string{
 	9:  {"|", "/", "-", "\\"},
 	14: {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"},
-	59: {".  ", ":. ", ".:.", " .:", "  .", "   "},
+	59: {"   ", ".  ", ":. ", "::.", ".::", " .:", "  .", "   "},
 }
 
 // Option is the general type for progress bar customization options.
@@ -293,7 +293,7 @@ func New64(max int64, options ...Option) *ProgressBar {
 			iterationString:  "it",
 			width:            40,
 			max:              max,
-			throttleInterval: 0 * time.Nanosecond,
+			throttleInterval: 0,
 			elapsedTime:      false,
 			predictTime:      false,
 			spinnerType:      9,
@@ -415,7 +415,7 @@ func (p *ProgressBar) Add64(delta int64) error {
 	return p.add(delta)
 }
 
-// Set sets progressbar's current value.
+// Set sets progress bar's current value.
 func (p *ProgressBar) Set(value int) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -423,7 +423,7 @@ func (p *ProgressBar) Set(value int) error {
 	return p.add(int64(value) - int64(p.state.currentBytes))
 }
 
-// Set64 sets progressbar's current value.
+// Set64 sets progress bar's current value.
 func (p *ProgressBar) Set64(value int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -569,7 +569,7 @@ func (p *ProgressBar) IsFinished() bool {
 func (p *ProgressBar) render() error {
 	// make sure that the rendering is not happening too quickly
 	// but always show if the currentNum reaches the max
-	if time.Since(p.state.lastShown).Nanoseconds() < p.config.throttleInterval.Nanoseconds() &&
+	if time.Since(p.state.lastShown) < p.config.throttleInterval &&
 		p.state.currentNum < p.config.max {
 		return nil
 	}
@@ -723,10 +723,10 @@ func renderProgressBar(c config, s *state) (int, error) {
 	if len(s.counterLastTenRates) > 0 && !s.finished && !c.totalRate {
 		// display recent rolling average rate
 		rate = average(s.counterLastTenRates)
-	} else if t := time.Since(s.startTime).Seconds(); t > 0 {
+	} else if t := time.Since(s.startTime); t > 0 {
 		// if no average samples, or if finished, or total rate option is set
 		// then display total rate
-		rate = s.currentBytes / t
+		rate = s.currentBytes / t.Seconds()
 	}
 
 	// format rate as units of bytes per second
@@ -747,12 +747,12 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else {
 			sb.WriteString(", ")
 		}
-		if rate > 1 || rate == 0 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/s", rate, c.iterationString))
-		} else if 60*rate > 1 {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/min", 60*rate, c.iterationString))
+		if rate > 1.618 || rate == 0 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/s", math.Round(rate), c.iterationString))
+		} else if 60*rate > 1.618 {
+			sb.WriteString(fmt.Sprintf("%0.0f %s/min", math.Round(60*rate), c.iterationString))
 		} else {
-			sb.WriteString(fmt.Sprintf("%0.0f %s/h", 3600*rate, c.iterationString))
+			sb.WriteString(fmt.Sprintf("%0.0f %s/h", math.Round(3600*rate), c.iterationString))
 		}
 	}
 	if sb.Len() > 0 {
@@ -764,12 +764,16 @@ func renderProgressBar(c config, s *state) (int, error) {
 	// show time prediction in "current/total" seconds format
 	switch {
 	case c.predictTime:
-		if rate >= 0 && c.max >= s.currentNum && s.currentNum > 0 {
-			rightBrac = (time.Duration((float64(c.max-s.currentNum) / rate)) * time.Second).String()
+		if c.max >= s.currentNum && s.currentNum > 0 {
+			var est time.Duration
+			if rate > 0 {
+				est = time.Duration(float64(c.max-s.currentNum) / rate * float64(time.Second))
+			}
+			rightBrac = est.Round(time.Second).String()
 		}
 		fallthrough
 	case c.elapsedTime:
-		leftBrac = (time.Duration(time.Since(s.startTime).Seconds()) * time.Second).String()
+		leftBrac = time.Since(s.startTime).Round(time.Second).String()
 	}
 
 	if c.fullWidth && !c.ignoreLength {
@@ -827,9 +831,9 @@ func renderProgressBar(c config, s *state) (int, error) {
 
 	if c.ignoreLength {
 		if !s.finished {
-			dt, st := time.Since(s.startTime).Milliseconds()/100, c.spinnerType
+			dt, st := time.Since(s.startTime).Seconds(), c.spinnerType
 			str = "\r " +
-				spinners[st][int(math.Round(math.Mod(float64(dt), float64(len(spinners[st])))))] +
+				spinners[st][int(math.Mod(10*dt, float64(len(spinners[st]))))] +
 				sp(" ", c.description != "") +
 				c.description +
 				sp(" ", sb.Len() > 0) +
