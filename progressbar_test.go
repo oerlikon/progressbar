@@ -581,45 +581,45 @@ func TestSpinners(t *testing.T) {
 			"" +
 				"\r | [0s] " +
 				"\r        \r" +
-				"\r / [0s] " +
+				"\r / [1s] " +
 				"\r        \r" +
-				"\r100% [1s] \n",
+				"\r100% [2s] \n",
 		},
 		{ // 4
 			[]Option{OptionShowIts(), OptionShowElapsed()},
 			"" +
 				"\r | (0 it/s) [0s] " +
 				"\r                 \r" +
-				"\r / (1 it/s) [0s] " +
-				"\r                 \r" +
-				"\r100% (33 it/min) [1s] \n",
+				"\r / (63 it/min) [1s] " +
+				"\r                    \r" +
+				"\r100% (32 it/min) [2s] \n",
 		},
 		{ // 5
 			[]Option{OptionShowCount(), OptionShowElapsed()},
 			"" +
 				"\r | (0/?) [0s] " +
 				"\r              \r" +
-				"\r / (1/?) [0s] " +
+				"\r / (1/?) [1s] " +
 				"\r              \r" +
-				"\r100% (1/1) [1s] \n",
+				"\r100% (1/1) [2s] \n",
 		},
 		{ // 6
 			[]Option{OptionDescription("Throbbing"), OptionShowIts(), OptionShowCount(), OptionShowElapsed()},
 			"" +
 				"\r | Throbbing (0/?, 0 it/s) [0s] " +
 				"\r                                \r" +
-				"\r / Throbbing (1/?, 1 it/s) [0s] " +
-				"\r                                \r" +
-				"\r100% Throbbing (1/1, 33 it/min) [1s] \n",
+				"\r / Throbbing (1/?, 63 it/min) [1s] " +
+				"\r                                   \r" +
+				"\r100% Throbbing (1/1, 32 it/min) [2s] \n",
 		},
 		{ // 7
 			[]Option{OptionShowIts(), OptionItsString("deg"), OptionSpinnerStyle(59)},
 			"" +
-				"\r .   (0 deg/s) " +
+				"\r     (0 deg/s) " +
 				"\r               \r" +
-				"\r  .: (1 deg/s) " +
-				"\r               \r" +
-				"\r100% (33 deg/min) \n",
+				"\r .   (63 deg/min) " +
+				"\r                  \r" +
+				"\r100% (32 deg/min) \n",
 		},
 	}
 
@@ -629,7 +629,7 @@ func TestSpinners(t *testing.T) {
 			t.Parallel()
 			buf := strings.Builder{}
 			spinner := New(-1, append(test.opts, []Option{OptionWriter(&buf)}...)...)
-			time.Sleep(900 * time.Millisecond)
+			time.Sleep(950 * time.Millisecond)
 			spinner.Add(1)
 			time.Sleep(900 * time.Millisecond)
 			spinner.Finish()
