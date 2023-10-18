@@ -14,17 +14,17 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
 	"github.com/mitchellh/colorstring"
+	"github.com/rivo/uniseg"
 	"golang.org/x/term"
 )
 
 // ProgressBar is a simple customizable progress bar.
 // It is safe for concurrent use by multiple goroutines.
 type ProgressBar struct {
+	sync.Mutex
 	state  state
 	config config
-	lock   sync.Mutex
 }
 
 // State is a summary of progress bar's current position.
@@ -317,10 +317,8 @@ func New64(max int64, options ...Option) *ProgressBar {
 	}
 
 	b.config.maxHumanized, b.config.maxHumanizedSuffix = humanizeBytes(float64(b.config.max))
-
 	b.checkTrickyWidths()
-
-	b.render()
+	_ = b.render()
 
 	return &b
 }
@@ -366,67 +364,94 @@ func Default(max int64, description ...string) *ProgressBar {
 
 // String returns progress bar's current rendering.
 func (p *ProgressBar) String() string {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.state.rendered
 }
 
 // Reset resets progress bar to initial state.
 func (p *ProgressBar) Reset() {
-	p.lock.Lock()
+	p.Lock()
 	p.state = getBasicState()
-	p.lock.Unlock()
+	p.Unlock()
 }
 
 // Finish fills progress bar to full and starts a new line.
 func (p *ProgressBar) Finish() error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
-	p.state.currentNum = p.config.max
-	p.state.lastShown = time.Time{} // re-render regardless of throttling
-	return p.add(0)
+	if !p.state.finished {
+		if p.state.currentNum < p.config.max {
+			p.state.currentNum = p.config.max
+		}
+		p.state.finished = true
+
+		if !p.config.clearOnFinish {
+			p.state.lastShown = time.Time{} // re-render regardless of throttling
+			if err := p.add(0); err != nil {
+				return err
+			}
+		}
+	}
+	if p.config.clearOnFinish {
+		return clearProgressBar(p.config, p.state)
+	}
+	return writeString(p.config, "\n")
 }
 
 // Stop stops progress bar at current state.
 func (p *ProgressBar) Stop() error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
-	p.state.stopped = true
-	p.state.lastShown = time.Time{} // re-render regardless of throttling
-	return p.add(0)
+	if !p.state.finished {
+		p.state.stopped = true
+
+		if !p.config.clearOnFinish {
+			p.state.lastShown = time.Time{} // re-render regardless of throttling
+			if err := p.add(0); err != nil {
+				return err
+			}
+		} else {
+			p.state.finished = true
+		}
+	}
+	if p.config.clearOnFinish {
+		return clearProgressBar(p.config, p.state)
+	}
+	return writeString(p.config, "\n")
 }
 
 // Add adds specified delta to progress bar's current value.
 func (p *ProgressBar) Add(delta int) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.add(int64(delta))
 }
 
 // Add64 adds specified delta to progress bar's current value.
 func (p *ProgressBar) Add64(delta int64) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.add(delta)
 }
 
 // Set sets progress bar's current value.
 func (p *ProgressBar) Set(value int) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.add(int64(value) - int64(p.state.currentBytes))
 }
 
 // Set64 sets progress bar's current value.
 func (p *ProgressBar) Set64(value int64) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.add(value - int64(p.state.currentBytes))
 }
@@ -480,69 +505,69 @@ func (p *ProgressBar) add(delta int64) error {
 
 // Clear erases progress bar from the current line.
 func (p *ProgressBar) Clear() error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return clearProgressBar(p.config, p.state)
 }
 
 // SetDescription changes progress bar's description label.
 func (p *ProgressBar) SetDescription(s string) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	p.config.description = s
 
 	p.checkTrickyWidths()
 
 	p.state.lastShown = time.Time{} // re-render regardless of throttling
-	p.render()
+	_ = p.render()
 }
 
 // Max returns progress bar's maximum value.
 func (p *ProgressBar) Max() int {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return int(p.config.max)
 }
 
 // Max64 returns progress bar's maximum value.
 func (p *ProgressBar) Max64() int64 {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.config.max
 }
 
 // AddMax adds specified delta to progress bar's maximum value.
 func (p *ProgressBar) AddMax(delta int) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.setMax(p.config.max + int64(delta))
 }
 
 // AddMax64 adds specified delta to progress bar's maximum value.
 func (p *ProgressBar) AddMax64(delta int64) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.setMax(p.config.max + delta)
 }
 
 // SetMax sets progress bar's maximum value at which it's considered full.
 func (p *ProgressBar) SetMax(max int) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.setMax(int64(max))
 }
 
 // SetMax64 sets progress bar's maximum value at which it's considered full.
 func (p *ProgressBar) SetMax64(max int64) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	return p.setMax(max)
 }
@@ -553,14 +578,6 @@ func (p *ProgressBar) setMax(max int64) error {
 		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max))
 	}
 	return p.add(0) // re-render
-}
-
-// IsFinished reports whether the progress bar is finished.
-func (p *ProgressBar) IsFinished() bool {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	return p.state.finished
 }
 
 // render renders the progress bar, updating the maximum
@@ -584,19 +601,6 @@ func (p *ProgressBar) render() error {
 	// check if the progress bar is finished
 	if !p.state.finished && (p.state.currentNum >= p.config.max || p.state.stopped) {
 		p.state.finished = true
-		if !p.config.clearOnFinish {
-			renderProgressBar(p.config, &p.state)
-			writeString(p.config, "\n")
-		}
-	}
-	if p.state.finished {
-		// when using ANSI codes we don't pre-clean the current line
-		if p.config.useANSICodes && p.config.clearOnFinish {
-			if err := clearProgressBar(p.config, p.state); err != nil {
-				return err
-			}
-		}
-		return nil
 	}
 
 	// then, re-render the current progress bar
@@ -630,7 +634,7 @@ func (p *ProgressBar) checkTrickyWidths() {
 		parts = append(parts, spinners[p.config.spinnerType]...)
 	}
 	for _, s := range parts {
-		if runewidth.StringWidth(s) != utf8.RuneCountInString(s) {
+		if uniseg.StringWidth(s) != utf8.RuneCountInString(s) {
 			p.config.trickyWidths = true
 			return
 		}
@@ -640,8 +644,8 @@ func (p *ProgressBar) checkTrickyWidths() {
 
 // State returns progress bar's current state.
 func (p *ProgressBar) State() State {
-	p.lock.Lock()
-	defer p.lock.Unlock()
+	p.Lock()
+	defer p.Unlock()
 
 	currentNum, currentBytes, max := p.state.currentNum, p.state.currentBytes, p.config.max
 
@@ -660,28 +664,22 @@ func (p *ProgressBar) State() State {
 }
 
 // Regex matching ANSI escape codes.
-var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+var ansiRegex = regexp.MustCompile(`\033(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
 
-func getStringWidth(c config, str string, colorize bool) int {
+func getStringWidth(c config, str string) int {
 	if c.colorCodes {
 		// convert any color codes in the progress bar into respective ANSI codes
 		str = colorstring.Color(str)
 	}
-
-	// width of the string printed to console
-	// does not include carriage return characters
-	cleanString := strings.ReplaceAll(str, "\r", "")
-
-	if c.colorCodes {
+	if c.colorCodes || c.useANSICodes {
 		// ANSI codes for colors do not take up space in the console output,
 		// so they do not count towards the output string width
-		cleanString = ansiRegex.ReplaceAllString(cleanString, "")
+		str = ansiRegex.ReplaceAllString(str, "")
 	}
-
 	if c.trickyWidths {
-		return runewidth.StringWidth(cleanString)
+		return uniseg.StringWidth(str)
 	}
-	return utf8.RuneCountInString(cleanString)
+	return utf8.RuneCountInString(str)
 }
 
 func renderProgressBar(c config, s *state) (int, error) {
@@ -711,7 +709,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			if c.showBytes {
 				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				sb.WriteString(fmt.Sprintf("%s %s", currentHumanize, currentSuffix))
-			} else if !s.finished {
+			} else if !s.finished || s.stopped {
 				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "?"))
 			} else {
 				sb.WriteString(fmt.Sprintf("%.0f/%.0f", s.currentBytes, s.currentBytes))
@@ -798,7 +796,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			amend += 1 // another space
 		}
 
-		c.width = width - getStringWidth(c, c.description, true) - 8 - amend - sb.Len() - len(leftBrac) - len(rightBrac)
+		c.width = width - getStringWidth(c, c.description) - 8 - amend - sb.Len() - len(leftBrac) - len(rightBrac)
 		s.currentSaucerSize = int(float64(s.currentPercent) / 100 * float64(c.width))
 	}
 
@@ -832,7 +830,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 	if c.ignoreLength {
 		if !s.finished {
 			dt, st := time.Since(s.startTime).Seconds(), c.spinnerType
-			str = "\r " +
+			str = " " +
 				spinners[st][int(math.Mod(10*dt, float64(len(spinners[st]))))] +
 				sp(" ", c.description != "") +
 				c.description +
@@ -842,7 +840,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				sp(leftBrac, c.elapsedTime) +
 				sp("]", c.elapsedTime) + " "
 		} else {
-			str = "\r100%" +
+			str = sp("100%", !s.stopped) +
 				sp(" ", c.description != "") +
 				c.description +
 				sp(" ", sb.Len() > 0) +
@@ -852,7 +850,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 				sp("]", c.elapsedTime) + " "
 		}
 	} else if rightBrac == "" || s.finished {
-		str = "\r" +
+		str = "" +
 			c.description +
 			sp(" ", c.description != "") +
 			fmt.Sprintf("%3d%% ", s.currentPercent) +
@@ -867,7 +865,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			sp(leftBrac, c.elapsedTime || c.predictTime) +
 			sp("]", c.elapsedTime || c.predictTime) + " "
 	} else {
-		str = "\r" +
+		str = "" +
 			c.description +
 			sp(" ", c.description != "") +
 			fmt.Sprintf("%3d%% ", s.currentPercent) +
@@ -884,9 +882,15 @@ func renderProgressBar(c config, s *state) (int, error) {
 		// convert any color codes in the progress bar into the respective ANSI codes
 		str = colorstring.Color(str)
 	}
-	s.rendered = str[1:]
 
-	return getStringWidth(c, str, false), writeString(c, str)
+	s.rendered = str
+
+	if c.useANSICodes {
+		// append the "clear rest of line" ANSI escape sequence
+		str = "\r" + str + "\033[0K"
+	}
+
+	return getStringWidth(c, str), writeString(c, str)
 }
 
 func clearProgressBar(c config, s state) error {
@@ -912,7 +916,7 @@ func writeString(c config, str string) error {
 		// ignore any errors in Sync(), as stdout
 		// can't be synced on some operating systems
 		// like Debian 9 (Stretch)
-		f.Sync()
+		_ = f.Sync()
 	}
 	return nil
 }
@@ -934,8 +938,10 @@ func NewReader(r io.Reader, bar *ProgressBar) Reader {
 // Read reads buffer p and adds the number of bytes read to the progress bar.
 func (r *Reader) Read(p []byte) (n int, err error) {
 	n, err = r.r.Read(p)
-	r.bar.Add(n)
-	return
+	if err == nil {
+		_ = r.bar.Add(n)
+	}
+	return n, err
 }
 
 // Close closes the internal reader if it implements io.Closer and fills progress bar to full.
