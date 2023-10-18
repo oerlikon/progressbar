@@ -39,39 +39,6 @@ func BenchmarkRenderTricky(b *testing.B) {
 	}
 }
 
-func TestIsFinished(t *testing.T) {
-	bar := New(72)
-
-	// Test1: If bar is not fully completed.
-	bar.Add(5)
-	if bar.IsFinished() {
-		t.Errorf("bar finished but it shouldn't")
-	}
-
-	// Test2: Bar fully completed.
-	bar.Add(67)
-	if !bar.IsFinished() {
-		t.Errorf("bar not finished but it should")
-	}
-
-	// Test3: If increases maximum bytes error should be thrown and
-	// bar finished will remain false.
-	bar.Reset()
-	err := bar.Add(73)
-	if err == nil || bar.IsFinished() {
-		t.Errorf("no error when bytes increases over max bytes or bar finished: %v", bar.IsFinished())
-	}
-}
-
-func TestStop(t *testing.T) {
-	bar := New(72)
-	bar.Add(44)
-	bar.Stop()
-	if !bar.IsFinished() {
-		t.Errorf("bar not finished but it should")
-	}
-}
-
 func TestBarSlowAdd(t *testing.T) {
 	buf := strings.Builder{}
 	bar := New(100,
@@ -434,11 +401,11 @@ func TestSetDescription(t *testing.T) {
 	bar.Add(10)
 	result := buf.String()
 	expect := "" +
-		"\r  0% |          | [0s] " +
+		"  0% |          | [0s] " +
 		"\r                       \r" +
-		"\rperforming axial adjustments   0% |          | [0s] " +
+		"performing axial adjustments   0% |          | [0s] " +
 		"\r                                                    \r" +
-		"\rperforming axial adjustments  10% |█         | [0s:0s] "
+		"performing axial adjustments  10% |█         | [0s:0s] "
 	if result != expect {
 		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
 	}
@@ -466,83 +433,90 @@ func TestOptionFullWidth(t *testing.T) {
 		{ // 1
 			[]Option{},
 			"" +
-				"\r  0% |                                                                       | " +
+				"  0% |                                                                       | " +
 				"\r                                                                               \r" +
-				"\r 10% |███████                                                                | " +
+				" 10% |███████                                                                | " +
 				"\r                                                                               \r" +
-				"\r100% |███████████████████████████████████████████████████████████████████████| \n",
+				"100% |███████████████████████████████████████████████████████████████████████| ",
 		},
 		{ // 2
 			[]Option{OptionDescription("Progress:")},
 			"" +
-				"\rProgress:   0% |                                                             | " +
+				"Progress:   0% |                                                             | " +
 				"\r                                                                               \r" +
-				"\rProgress:  10% |██████                                                       | " +
+				"Progress:  10% |██████                                                       | " +
 				"\r                                                                               \r" +
-				"\rProgress: 100% |█████████████████████████████████████████████████████████████| \n",
+				"Progress: 100% |█████████████████████████████████████████████████████████████| ",
 		},
 		{ // 3
 			[]Option{OptionShowRemaining()},
 			"" +
-				"\r  0% |                                                                  | [0s] " +
+				"  0% |                                                                  | [0s] " +
 				"\r                                                                               \r" +
-				"\r 10% |██████                                                         | [1s:9s] " +
+				" 10% |██████                                                         | [1s:9s] " +
 				"\r                                                                               \r" +
-				"\r100% |███████████████████████████████████████████████████████████████| [2s] \n",
+				"100% |███████████████████████████████████████████████████████████████| [2s] ",
 		},
 		{ // 4
 			[]Option{OptionShowElapsed()},
 			"" +
-				"\r  0% |                                                                  | [0s] " +
+				"  0% |                                                                  | [0s] " +
 				"\r                                                                               \r" +
-				"\r 10% |██████                                                            | [1s] " +
+				" 10% |██████                                                            | [1s] " +
 				"\r                                                                               \r" +
-				"\r100% |██████████████████████████████████████████████████████████████████| [2s] \n",
+				"100% |██████████████████████████████████████████████████████████████████| [2s] ",
 		},
 		{ // 5
 			[]Option{OptionShowIts(), OptionShowRemaining()},
 			"" +
-				"\r  0% |                                                         | (0 it/s) [0s] " +
+				"  0% |                                                         | (0 it/s) [0s] " +
 				"\r                                                                               \r" +
-				"\r 10% |█████                                                | (10 it/s) [1s:9s] " +
+				" 10% |█████                                                | (10 it/s) [1s:9s] " +
 				"\r                                                                               \r" +
-				"\r100% |█████████████████████████████████████████████████████| (50 it/s) [2s] \n",
+				"100% |█████████████████████████████████████████████████████| (50 it/s) [2s] ",
 		},
 		{ // 6
 			[]Option{OptionShowCount(), OptionShowRemaining()},
 			"" +
-				"\r  0% |                                                          | (0/100) [0s] " +
+				"  0% |                                                          | (0/100) [0s] " +
 				"\r                                                                               \r" +
-				"\r 10% |█████                                                 | (10/100) [1s:9s] " +
+				" 10% |█████                                                 | (10/100) [1s:9s] " +
 				"\r                                                                               \r" +
-				"\r100% |█████████████████████████████████████████████████████| (100/100) [2s] \n",
+				"100% |█████████████████████████████████████████████████████| (100/100) [2s] ",
 		},
 		{ // 7
 			[]Option{OptionDescription("Progress:"), OptionShowIts(), OptionShowCount(), OptionShowRemaining()},
 			"" +
-				"\rProgress:   0% |                                        | (0/100, 0 it/s) [0s] " +
+				"Progress:   0% |                                        | (0/100, 0 it/s) [0s] " +
 				"\r                                                                               \r" +
-				"\rProgress:  10% |███                                | (10/100, 10 it/s) [1s:9s] " +
+				"Progress:  10% |███                                | (10/100, 10 it/s) [1s:9s] " +
 				"\r                                                                               \r" +
-				"\rProgress: 100% |██████████████████████████████████| (100/100, 50 it/s) [2s] \n",
+				"Progress: 100% |██████████████████████████████████| (100/100, 50 it/s) [2s] ",
 		},
 		{ // 8
 			[]Option{OptionShowIts(), OptionShowCount(), OptionShowElapsed()},
 			"" +
-				"\r  0% |                                                  | (0/100, 0 it/s) [0s] " +
+				"  0% |                                                  | (0/100, 0 it/s) [0s] " +
 				"\r                                                                               \r" +
-				"\r 10% |████                                            | (10/100, 10 it/s) [1s] " +
+				" 10% |████                                            | (10/100, 10 it/s) [1s] " +
 				"\r                                                                               \r" +
-				"\r100% |███████████████████████████████████████████████| (100/100, 50 it/s) [2s] \n",
+				"100% |███████████████████████████████████████████████| (100/100, 50 it/s) [2s] ",
 		},
 		{ // 9
 			[]Option{OptionShowIts(), OptionItsString("deg"), OptionShowCount()},
 			"" +
-				"\r  0% |                                                      | (0/100, 0 deg/s) " +
+				"  0% |                                                      | (0/100, 0 deg/s) " +
 				"\r                                                                               \r" +
-				"\r 10% |█████                                               | (10/100, 10 deg/s) " +
+				" 10% |█████                                               | (10/100, 10 deg/s) " +
 				"\r                                                                               \r" +
-				"\r100% |███████████████████████████████████████████████████| (100/100, 50 deg/s) \n",
+				"100% |███████████████████████████████████████████████████| (100/100, 50 deg/s) ",
+		},
+		{ // 10
+			[]Option{OptionUseANSICodes(), OptionShowIts(), OptionItsString("ans"), OptionShowCount()},
+			"" +
+				"\r  0% |                                                      | (0/100, 0 ans/s) \033[0K" +
+				"\r 10% |█████                                               | (10/100, 10 ans/s) \033[0K" +
+				"\r100% |███████████████████████████████████████████████████| (100/100, 50 ans/s) \033[0K",
 		},
 	}
 
@@ -569,65 +543,65 @@ func TestSpinners(t *testing.T) {
 		{ // 1
 			[]Option{},
 			"" +
-				"\r | " +
+				" | " +
 				"\r   \r" +
-				"\r / " +
+				" / " +
 				"\r   \r" +
-				"\r100% \n",
+				"100% \n",
 		},
 		{ // 2
 			[]Option{OptionDescription("Spinning")},
 			"" +
-				"\r | Spinning " +
+				" | Spinning " +
 				"\r            \r" +
-				"\r / Spinning " +
+				" / Spinning " +
 				"\r            \r" +
-				"\r100% Spinning \n",
+				"100% Spinning \n",
 		},
 		{ // 3
 			[]Option{OptionShowElapsed()},
 			"" +
-				"\r | [0s] " +
+				" | [0s] " +
 				"\r        \r" +
-				"\r / [1s] " +
+				" / [1s] " +
 				"\r        \r" +
-				"\r100% [2s] \n",
+				"100% [2s] \n",
 		},
 		{ // 4
 			[]Option{OptionShowIts(), OptionShowElapsed()},
 			"" +
-				"\r | (0 it/s) [0s] " +
+				" | (0 it/s) [0s] " +
 				"\r                 \r" +
-				"\r / (63 it/min) [1s] " +
+				" / (63 it/min) [1s] " +
 				"\r                    \r" +
-				"\r100% (32 it/min) [2s] \n",
+				"100% (32 it/min) [2s] \n",
 		},
 		{ // 5
 			[]Option{OptionShowCount(), OptionShowElapsed()},
 			"" +
-				"\r | (0/?) [0s] " +
+				" | (0/?) [0s] " +
 				"\r              \r" +
-				"\r / (1/?) [1s] " +
+				" / (1/?) [1s] " +
 				"\r              \r" +
-				"\r100% (1/1) [2s] \n",
+				"100% (1/1) [2s] \n",
 		},
 		{ // 6
 			[]Option{OptionDescription("Throbbing"), OptionShowIts(), OptionShowCount(), OptionShowElapsed()},
 			"" +
-				"\r | Throbbing (0/?, 0 it/s) [0s] " +
+				" | Throbbing (0/?, 0 it/s) [0s] " +
 				"\r                                \r" +
-				"\r / Throbbing (1/?, 63 it/min) [1s] " +
+				" / Throbbing (1/?, 63 it/min) [1s] " +
 				"\r                                   \r" +
-				"\r100% Throbbing (1/1, 32 it/min) [2s] \n",
+				"100% Throbbing (1/1, 32 it/min) [2s] \n",
 		},
 		{ // 7
 			[]Option{OptionShowIts(), OptionItsString("deg"), OptionSpinnerStyle(59)},
 			"" +
-				"\r     (0 deg/s) " +
+				"     (0 deg/s) " +
 				"\r               \r" +
-				"\r .   (63 deg/min) " +
+				" .   (63 deg/min) " +
 				"\r                  \r" +
-				"\r100% (32 deg/min) \n",
+				"100% (32 deg/min) \n",
 		},
 	}
 
