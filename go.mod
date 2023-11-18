@@ -6,7 +6,7 @@ require (
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 	github.com/rivo/uniseg v0.4.4
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/term v0.13.0
+	golang.org/x/term v0.14.0
 )
 
 require (
