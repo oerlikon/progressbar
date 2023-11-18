@@ -474,14 +474,16 @@ func (p *ProgressBar) add(delta int64) error {
 	if !p.config.totalRate {
 		// reset the countdown timer approx every second to take rolling average
 		p.state.counterNumSinceLast += delta
-		if t := time.Since(p.state.counterTime).Seconds(); t > 0.5 {
-			rate := float64(p.state.counterNumSinceLast) / t
-			p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
-			if len(p.state.counterLastTenRates) > 10 {
-				p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
+		if p.state.counterNumSinceLast > 0 {
+			if t := time.Since(p.state.counterTime).Seconds(); t > 0.5 {
+				rate := float64(p.state.counterNumSinceLast) / t
+				p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
+				if len(p.state.counterLastTenRates) > 10 {
+					p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
+				}
+				p.state.counterTime = time.Now()
+				p.state.counterNumSinceLast = 0
 			}
-			p.state.counterTime = time.Now()
-			p.state.counterNumSinceLast = 0
 		}
 	}
 
