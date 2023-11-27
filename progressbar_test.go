@@ -23,6 +23,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func OptionClock(clock func() time.Time) Option {
+	return func(p *ProgressBar) {
+		p.config.now = clock
+	}
+}
+
 func BenchmarkRenderSimple(b *testing.B) {
 	bar := New64(1e8, OptionWriter(io.Discard), OptionShowIts(),
 		OptionDescription("£"))
@@ -40,13 +46,14 @@ func BenchmarkRenderTricky(b *testing.B) {
 }
 
 func TestBarSlowAdd(t *testing.T) {
-	buf := strings.Builder{}
+	buf, clock := strings.Builder{}, time.Now()
 	bar := New(100,
 		OptionWidth(10),
 		OptionShowIts(),
 		OptionShowRemaining(),
+		OptionClock(func() time.Time { return clock }),
 		OptionWriter(&buf))
-	time.Sleep(3 * time.Second)
+	clock = clock.Add(3 * time.Second)
 	bar.Add(1)
 	if !strings.Contains(buf.String(), "1%") {
 		t.Errorf("wrong string: %q", buf.String())
@@ -60,21 +67,22 @@ func TestBarSlowAdd(t *testing.T) {
 }
 
 func TestBarSmallBytes(t *testing.T) {
-	buf := strings.Builder{}
+	buf, clock := strings.Builder{}, time.Now()
 	bar := New64(100000000,
 		OptionShowBytes(),
 		OptionShowCount(),
 		OptionWidth(10),
+		OptionClock(func() time.Time { return clock }),
 		OptionWriter(&buf))
 	for i := 1; i < 10; i++ {
-		time.Sleep(100 * time.Millisecond)
+		clock = clock.Add(100 * time.Millisecond)
 		bar.Add(1000)
 	}
 	if !strings.Contains(buf.String(), "9.0 KB/100 MB") {
 		t.Errorf("wrong string: %q", buf.String())
 	}
 	for i := 1; i < 10; i++ {
-		time.Sleep(10 * time.Millisecond)
+		clock = clock.Add(10 * time.Millisecond)
 		bar.Add(1000000)
 	}
 	if !strings.Contains(buf.String(), "9.0/100 MB") {
@@ -83,13 +91,14 @@ func TestBarSmallBytes(t *testing.T) {
 }
 
 func TestBarFastBytes(t *testing.T) {
-	buf := strings.Builder{}
+	buf, clock := strings.Builder{}, time.Now()
 	bar := New64(1e8,
 		OptionShowBytes(),
 		OptionShowCount(),
 		OptionWidth(10),
+		OptionClock(func() time.Time { return clock }),
 		OptionWriter(&buf))
-	time.Sleep(time.Millisecond)
+	clock = clock.Add(time.Millisecond)
 	bar.Add(2e7)
 	if !strings.Contains(buf.String(), " GB/s)") {
 		t.Errorf("wrong string: %q", buf.String())
@@ -109,7 +118,6 @@ func TestBar(t *testing.T) {
 
 func TestState(t *testing.T) {
 	bar := New(100, OptionWidth(10))
-	time.Sleep(1 * time.Second)
 	bar.Add(10)
 	s := bar.State()
 	if s.CurrentPercent != 0.1 {
@@ -165,13 +173,14 @@ func TestElapsed(t *testing.T) {
 }
 
 func TestOptionElapsed_spinner(t *testing.T) {
-	buf := strings.Builder{}
+	buf, clock := strings.Builder{}, time.Now()
 	bar := New(-1,
 		OptionShowElapsed(),
 		OptionShowIts(),
 		OptionShowCount(),
+		OptionClock(func() time.Time { return clock }),
 		OptionWriter(&buf))
-	time.Sleep(1 * time.Second)
+	clock = clock.Add(1 * time.Second)
 	bar.Add(5)
 	result := bar.String()
 	expect := " - (5/?, 5 it/s) [1s] "
@@ -186,7 +195,6 @@ func TestEstimated(t *testing.T) {
 		OptionWidth(10),
 		OptionShowRemaining(),
 		OptionWriter(&buf))
-
 	bar.Add(7)
 	result := bar.String()
 	expect := " 70% |███████   | [0s:0s] "
@@ -196,8 +204,11 @@ func TestEstimated(t *testing.T) {
 }
 
 func TestSpinnerState(t *testing.T) {
-	bar := New(-1, OptionWidth(100))
-	time.Sleep(1 * time.Second)
+	clock := time.Now()
+	bar := New(-1,
+		OptionWidth(100),
+		OptionClock(func() time.Time { return clock }))
+	clock = clock.Add(1 * time.Second)
 	bar.Add(10)
 
 	state := bar.State()
@@ -524,11 +535,14 @@ func TestOptionFullWidth(t *testing.T) {
 		test := test
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
-			buf := strings.Builder{}
-			bar := New(100, append(test.opts, []Option{OptionFullWidth(), OptionWriter(&buf)}...)...)
-			time.Sleep(1 * time.Second)
+			buf, clock := strings.Builder{}, time.Now()
+			bar := New(100, append(test.opts, []Option{
+				OptionFullWidth(),
+				OptionClock(func() time.Time { return clock }),
+				OptionWriter(&buf)}...)...)
+			clock = clock.Add(1 * time.Second)
 			bar.Add(10)
-			time.Sleep(1 * time.Second)
+			clock = clock.Add(1 * time.Second)
 			bar.Add(90)
 			assert.Equal(t, test.expected, buf.String())
 		})
@@ -609,11 +623,13 @@ func TestSpinners(t *testing.T) {
 		test := test
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
-			buf := strings.Builder{}
-			spinner := New(-1, append(test.opts, []Option{OptionWriter(&buf)}...)...)
-			time.Sleep(950 * time.Millisecond)
+			buf, clock := strings.Builder{}, time.Now()
+			spinner := New(-1, append(test.opts, []Option{
+				OptionClock(func() time.Time { return clock }),
+				OptionWriter(&buf)}...)...)
+			clock = clock.Add(950 * time.Millisecond)
 			spinner.Add(1)
-			time.Sleep(900 * time.Millisecond)
+			clock = clock.Add(900 * time.Millisecond)
 			spinner.Finish()
 			assert.Equal(t, test.expected, buf.String())
 		})
