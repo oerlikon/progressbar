@@ -48,6 +48,7 @@ type state struct {
 	counterTime         time.Time
 	counterNumSinceLast int64
 	counterLastTenRates []float64
+	counterLastRatesIdx int
 
 	maxLineWidth int
 	currentBytes float64
@@ -63,6 +64,7 @@ type config struct {
 	maxHumanizedSuffix string
 	width              int
 	writer             io.Writer
+	now                func() time.Time
 	theme              Theme
 	description        string
 	iterationString    string
@@ -285,21 +287,19 @@ func New(max int, options ...Option) *ProgressBar {
 //
 // With max == -1 it creates a spinner.
 func New64(max int64, options ...Option) *ProgressBar {
-	b := ProgressBar{
-		state: getBasicState(),
-		config: config{
-			writer:           os.Stdout,
-			theme:            defaultTheme,
-			iterationString:  "it",
-			width:            40,
-			max:              max,
-			throttleInterval: 0,
-			elapsedTime:      false,
-			predictTime:      false,
-			spinnerType:      9,
-			visible:          true,
-		},
-	}
+	b := ProgressBar{config: config{
+		writer:           os.Stdout,
+		now:              time.Now,
+		theme:            defaultTheme,
+		iterationString:  "it",
+		width:            40,
+		max:              max,
+		throttleInterval: 0,
+		elapsedTime:      false,
+		predictTime:      false,
+		spinnerType:      9,
+		visible:          true,
+	}}
 
 	for _, o := range options {
 		o(&b)
@@ -318,17 +318,11 @@ func New64(max int64, options ...Option) *ProgressBar {
 
 	b.config.maxHumanized, b.config.maxHumanizedSuffix = humanizeBytes(float64(b.config.max))
 	b.checkTrickyWidths()
-	_ = b.render()
+
+	b.state.startTime = b.config.now()
+	_ = b.render(b.state.startTime)
 
 	return &b
-}
-
-func getBasicState() state {
-	now := time.Now()
-	return state{
-		startTime:   now,
-		counterTime: now,
-	}
 }
 
 // DefaultBytes creates a new ProgressBar for measuring bytes throughput
@@ -373,7 +367,7 @@ func (p *ProgressBar) String() string {
 // Reset resets progress bar to initial state.
 func (p *ProgressBar) Reset() {
 	p.Lock()
-	p.state = getBasicState()
+	p.state = state{startTime: p.config.now()}
 	p.Unlock()
 }
 
@@ -396,9 +390,9 @@ func (p *ProgressBar) Finish() error {
 		}
 	}
 	if p.config.clearOnFinish {
-		return clearProgressBar(p.config, p.state)
+		return clearProgressBar(&p.config, &p.state)
 	}
-	return writeString(p.config, "\n")
+	return writeString(&p.config, "\n")
 }
 
 // Stop stops progress bar at current state.
@@ -419,9 +413,9 @@ func (p *ProgressBar) Stop() error {
 		}
 	}
 	if p.config.clearOnFinish {
-		return clearProgressBar(p.config, p.state)
+		return clearProgressBar(&p.config, &p.state)
 	}
-	return writeString(p.config, "\n")
+	return writeString(&p.config, "\n")
 }
 
 // Add adds specified delta to progress bar's current value.
@@ -457,33 +451,50 @@ func (p *ProgressBar) Set64(value int64) error {
 }
 
 func (p *ProgressBar) add(delta int64) error {
-	if p.config.max <= 0 {
-		return errors.New("max must be greater than 0")
-	}
+	now := p.config.now()
 
-	if p.state.currentNum < p.config.max {
-		if p.config.ignoreLength {
-			p.state.currentNum = (p.state.currentNum + delta) % p.config.max
-		} else {
-			p.state.currentNum += delta
-		}
+	p.state.currentNum += delta
+	if p.config.ignoreLength {
+		p.state.currentNum %= p.config.max
+	} else if p.state.currentNum > p.config.max {
+		return errors.New("current number exceeds max")
 	}
 
 	p.state.currentBytes += float64(delta)
 
 	if !p.config.totalRate {
-		// reset the countdown timer approx every second to take rolling average
 		p.state.counterNumSinceLast += delta
-		if p.state.counterNumSinceLast > 0 {
-			if t := time.Since(p.state.counterTime).Seconds(); t > 0.5 {
-				rate := float64(p.state.counterNumSinceLast) / t
-				p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
-				if len(p.state.counterLastTenRates) > 10 {
-					p.state.counterLastTenRates = p.state.counterLastTenRates[1:]
+	}
+
+	// make sure that the following is not happening too often
+	// but always show if the currentNum reaches the max
+	if p.config.throttleInterval > 0 &&
+		now.Sub(p.state.lastShown) < p.config.throttleInterval &&
+		p.state.currentNum < p.config.max {
+		return nil
+	}
+
+	if !p.config.totalRate {
+		if !p.state.counterTime.IsZero() {
+			if p.state.counterNumSinceLast > 0 {
+				// reset counter time approx every half second to take rolling average
+				t := now.Sub(p.state.counterTime).Seconds()
+				if t > 0.382 || len(p.state.counterLastTenRates) == 0 {
+					p.addRate(float64(p.state.counterNumSinceLast) / t)
+					p.state.counterNumSinceLast = 0
+					p.state.counterTime = now
 				}
-				p.state.counterTime = time.Now()
+			} else {
+				p.state.counterTime = now
+			}
+		} else {
+			p.state.counterLastTenRates = make([]float64, 0, 10)
+			if p.state.counterNumSinceLast > 0 {
+				t := now.Sub(p.state.startTime).Seconds()
+				p.addRate(float64(p.state.counterNumSinceLast) / t)
 				p.state.counterNumSinceLast = 0
 			}
+			p.state.counterTime = now
 		}
 	}
 
@@ -493,16 +504,25 @@ func (p *ProgressBar) add(delta int64) error {
 	updateBar := p.state.currentPercent != p.state.lastPercent && p.state.currentPercent > 0
 
 	p.state.lastPercent = p.state.currentPercent
-	if p.state.currentNum > p.config.max {
-		return errors.New("current number exceeds max")
-	}
 
 	// always update if show bytes/second or its/second
 	if updateBar || p.config.showIterationsPerSecond || p.config.showIterationsCount || delta == 0 {
-		return p.render()
+		return p.render(now)
 	}
 
 	return nil
+}
+
+func (p *ProgressBar) addRate(rate float64) {
+	if len(p.state.counterLastTenRates) < 10 {
+		p.state.counterLastTenRates = append(p.state.counterLastTenRates, rate)
+		return
+	}
+	p.state.counterLastTenRates[p.state.counterLastRatesIdx] = rate
+	p.state.counterLastRatesIdx++
+	if p.state.counterLastRatesIdx == 10 {
+		p.state.counterLastRatesIdx = 0
+	}
 }
 
 // Clear erases progress bar from the current line.
@@ -510,7 +530,7 @@ func (p *ProgressBar) Clear() error {
 	p.Lock()
 	defer p.Unlock()
 
-	return clearProgressBar(p.config, p.state)
+	return clearProgressBar(&p.config, &p.state)
 }
 
 // SetDescription changes progress bar's description label.
@@ -522,8 +542,7 @@ func (p *ProgressBar) SetDescription(s string) {
 
 	p.checkTrickyWidths()
 
-	p.state.lastShown = time.Time{} // re-render regardless of throttling
-	_ = p.render()
+	_ = p.render(p.config.now())
 }
 
 // Max returns progress bar's maximum value.
@@ -575,6 +594,10 @@ func (p *ProgressBar) SetMax64(max int64) error {
 }
 
 func (p *ProgressBar) setMax(max int64) error {
+	if p.config.max < 0 {
+		return errors.New("max must be nonnegative")
+	}
+
 	p.config.max = max
 	if p.config.showBytes {
 		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max))
@@ -585,17 +608,10 @@ func (p *ProgressBar) setMax(max int64) error {
 // render renders the progress bar, updating the maximum
 // rendered line width. this function is not thread-safe,
 // so it must be called with an acquired lock.
-func (p *ProgressBar) render() error {
-	// make sure that the rendering is not happening too quickly
-	// but always show if the currentNum reaches the max
-	if time.Since(p.state.lastShown) < p.config.throttleInterval &&
-		p.state.currentNum < p.config.max {
-		return nil
-	}
-
+func (p *ProgressBar) render(now time.Time) error {
 	if !p.config.useANSICodes {
 		// first, clear the existing progress bar
-		if err := clearProgressBar(p.config, p.state); err != nil {
+		if err := clearProgressBar(&p.config, &p.state); err != nil {
 			return err
 		}
 	}
@@ -606,7 +622,7 @@ func (p *ProgressBar) render() error {
 	}
 
 	// then, re-render the current progress bar
-	w, err := renderProgressBar(p.config, &p.state)
+	w, err := renderProgressBar(&p.config, &p.state, now)
 	if err != nil {
 		return err
 	}
@@ -615,7 +631,7 @@ func (p *ProgressBar) render() error {
 		p.state.maxLineWidth = w
 	}
 
-	p.state.lastShown = time.Now()
+	p.state.lastShown = now
 
 	return nil
 }
@@ -654,7 +670,7 @@ func (p *ProgressBar) State() State {
 	s := State{
 		CurrentPercent: float64(currentNum) / float64(max),
 		CurrentBytes:   currentBytes,
-		SecondsSince:   time.Since(p.state.startTime).Seconds(),
+		SecondsSince:   p.config.now().Sub(p.state.startTime).Seconds(),
 	}
 	if p.state.currentNum > 0 {
 		s.SecondsLeft = s.SecondsSince / float64(currentNum) * float64(max-currentNum)
@@ -668,7 +684,7 @@ func (p *ProgressBar) State() State {
 // Regex matching ANSI escape codes.
 var ansiRegex = regexp.MustCompile(`\033(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
 
-func getStringWidth(c config, str string) int {
+func getStringWidth(c *config, str string) int {
 	if c.colorCodes {
 		// convert any color codes in the progress bar into respective ANSI codes
 		str = colorstring.Color(str)
@@ -684,7 +700,7 @@ func getStringWidth(c config, str string) int {
 	return utf8.RuneCountInString(str)
 }
 
-func renderProgressBar(c config, s *state) (int, error) {
+func renderProgressBar(c *config, s *state, now time.Time) (int, error) {
 	var sb strings.Builder
 
 	// show iteration count in "current/total" iterations format
@@ -720,10 +736,10 @@ func renderProgressBar(c config, s *state) (int, error) {
 	}
 
 	rate := 0.0
-	if len(s.counterLastTenRates) > 0 && !s.finished && !c.totalRate {
+	if !s.finished && !c.totalRate && len(s.counterLastTenRates) > 0 {
 		// display recent rolling average rate
 		rate = average(s.counterLastTenRates)
-	} else if t := time.Since(s.startTime); t > 0 {
+	} else if t := now.Sub(s.startTime); t > 0 {
 		// if no average samples, or if finished, or total rate option is set
 		// then display total rate
 		rate = s.currentBytes / t.Seconds()
@@ -773,7 +789,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 		fallthrough
 	case c.elapsedTime:
-		leftBrac = time.Since(s.startTime).Round(time.Second).String()
+		leftBrac = now.Sub(s.startTime).Round(time.Second).String()
 	}
 
 	if c.fullWidth && !c.ignoreLength {
@@ -831,7 +847,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 
 	if c.ignoreLength {
 		if !s.finished {
-			dt, st := time.Since(s.startTime).Seconds(), c.spinnerType
+			dt, st := now.Sub(s.startTime).Seconds(), c.spinnerType
 			str = " " +
 				spinners[st][int(math.Mod(10*dt, float64(len(spinners[st]))))] +
 				sp(" ", c.description != "") +
@@ -895,7 +911,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 	return getStringWidth(c, str), writeString(c, str)
 }
 
-func clearProgressBar(c config, s state) error {
+func clearProgressBar(c *config, s *state) error {
 	if s.maxLineWidth == 0 {
 		return nil
 	}
@@ -907,7 +923,7 @@ func clearProgressBar(c config, s state) error {
 	return writeString(c, "\r"+strings.Repeat(" ", s.maxLineWidth)+"\r")
 }
 
-func writeString(c config, str string) error {
+func writeString(c *config, str string) error {
 	if !c.visible {
 		return nil
 	}
@@ -973,12 +989,12 @@ func (p *ProgressBar) Close() (err error) {
 	return p.Finish()
 }
 
-func average(xs []float64) float64 {
+func average(xx []float64) float64 {
 	total := 0.0
-	for _, v := range xs {
-		total += v
+	for _, x := range xx {
+		total += x
 	}
-	return total / float64(len(xs))
+	return total / float64(len(xx))
 }
 
 var sizes = []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
