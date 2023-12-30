@@ -95,7 +95,7 @@ type config struct {
 	// minimum time to wait in between updates
 	throttleInterval time.Duration
 
-	// clear bar once finished or stopped
+	// clear bar once finished
 	clearOnFinish bool
 
 	// spinnerType should be a key from the spinners map
@@ -253,7 +253,7 @@ func OptionThrottle(interval time.Duration) Option {
 	}
 }
 
-// OptionClearOnFinish makes progress bar disappear after it's finished or stopped.
+// OptionClearOnFinish makes progress bar disappear when it's finished (but not when stopped).
 func OptionClearOnFinish() Option {
 	return func(p *ProgressBar) {
 		p.config.clearOnFinish = true
@@ -403,17 +403,10 @@ func (p *ProgressBar) Stop() error {
 	if !p.state.finished {
 		p.state.stopped = true
 
-		if !p.config.clearOnFinish {
-			p.state.lastShown = time.Time{} // re-render regardless of throttling
-			if err := p.add(0); err != nil {
-				return err
-			}
-		} else {
-			p.state.finished = true
+		p.state.lastShown = time.Time{} // re-render regardless of throttling
+		if err := p.add(0); err != nil {
+			return err
 		}
-	}
-	if p.config.clearOnFinish {
-		return clearProgressBar(&p.config, &p.state)
 	}
 	return writeString(&p.config, "\n")
 }
