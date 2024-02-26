@@ -434,12 +434,6 @@ func TestSpinnerState(t *testing.T) {
 	bar.Add(10)
 
 	state := bar.State()
-	if state.Max != -1 {
-		t.Errorf("Max mismatched gotMax %d wantMax %d", state.Max, -1)
-	}
-	if state.CurrentNum != 10 {
-		t.Errorf("Number mismatched gotNum %d wantNum %d", state.CurrentNum, 10)
-	}
 	if state.CurrentBytes != 10.0 {
 		t.Errorf("Number of bytes mismatched gotBytes %f wantBytes %f", state.CurrentBytes, 10.0)
 	}
@@ -759,18 +753,10 @@ func TestOptionFullWidth(t *testing.T) {
 	}
 }
 
-func TestHumanizeBytesSI(t *testing.T) {
-	amount, suffix := humanizeBytes(float64(12.34)*1000*1000, false)
+func TestHumanizeBytes(t *testing.T) {
+	amount, suffix := humanizeBytes(float64(12.34) * 1000 * 1000)
 	assert.Equal(t, "12 MB", fmt.Sprintf("%s%s", amount, suffix))
 
-	amount, suffix = humanizeBytes(float64(56.78)*1000*1000*1000, false)
+	amount, suffix = humanizeBytes(float64(56.78) * 1000 * 1000 * 1000)
 	assert.Equal(t, "57 GB", fmt.Sprintf("%s%s", amount, suffix))
-}
-
-func TestHumanizeBytesIEC(t *testing.T) {
-	amount, suffix := humanizeBytes(float64(12.34)*1024*1024, true)
-	assert.Equal(t, "12 MiB", fmt.Sprintf("%s%s", amount, suffix))
-
-	amount, suffix = humanizeBytes(float64(56.78)*1024*1024*1024, true)
-	assert.Equal(t, "57 GiB", fmt.Sprintf("%s%s", amount, suffix))
 }

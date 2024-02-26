@@ -26,14 +26,11 @@ type ProgressBar struct {
 
 // State is the basic properties of the bar
 type State struct {
-	Max            int64
-	CurrentNum     int64
 	CurrentPercent float64
 	CurrentBytes   float64
 	SecondsSince   float64
 	SecondsLeft    float64
 	KBsPerSecond   float64
-	Description    string
 }
 
 type state struct {
@@ -108,9 +105,6 @@ type config struct {
 
 	// whether the render function should make use of ANSI codes to reduce console I/O
 	useANSICodes bool
-
-	// whether to use the IEC units (e.g. MiB) instead of the default SI units (e.g. MB)
-	useIECUnits bool
 }
 
 // Theme defines the elements of the bar
@@ -277,14 +271,6 @@ func OptionUseANSICodes(val bool) Option {
 	}
 }
 
-// OptionUseIECUnits will enable IEC units (e.g. MiB) instead of the default
-// SI units (e.g. MB).
-func OptionUseIECUnits(val bool) Option {
-	return func(p *ProgressBar) {
-		p.config.useIECUnits = val
-	}
-}
-
 // NewOptions constructs a new instance of ProgressBar, with any options you specify
 func NewOptions(max int, options ...Option) *ProgressBar {
 	return NewOptions64(int64(max), options...)
@@ -323,8 +309,7 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 		b.config.predictTime = false
 	}
 
-	b.config.maxHumanized, b.config.maxHumanizedSuffix = humanizeBytes(float64(b.config.max),
-		b.config.useIECUnits)
+	b.config.maxHumanized, b.config.maxHumanizedSuffix = humanizeBytes(float64(b.config.max))
 
 	if b.config.renderWithBlankState {
 		b.RenderBlank()
@@ -611,8 +596,7 @@ func (p *ProgressBar) ChangeMax64(newMax int64) {
 	p.config.max = newMax
 
 	if p.config.showBytes {
-		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max),
-			p.config.useIECUnits)
+		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max))
 	}
 
 	p.Add(0) // re-render
@@ -686,11 +670,6 @@ func (p *ProgressBar) State() State {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	s := State{}
-	s.CurrentNum = p.state.currentNum
-	s.Max = p.config.max
-	if p.config.ignoreLength {
-		s.Max = -1
-	}
 	s.CurrentPercent = float64(p.state.currentNum) / float64(p.config.max)
 	s.CurrentBytes = p.state.currentBytes
 	s.SecondsSince = time.Since(p.state.startTime).Seconds()
@@ -698,7 +677,6 @@ func (p *ProgressBar) State() State {
 		s.SecondsLeft = s.SecondsSince / float64(p.state.currentNum) * (float64(p.config.max) - float64(p.state.currentNum))
 	}
 	s.KBsPerSecond = float64(p.state.currentBytes) / 1024.0 / s.SecondsSince
-	s.Description = p.config.description
 	return s
 }
 
@@ -751,7 +729,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 		if !c.ignoreLength {
 			if c.showBytes {
-				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
+				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				if currentSuffix == c.maxHumanizedSuffix {
 					sb.WriteString(fmt.Sprintf("%s/%s%s",
 						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix))
@@ -764,7 +742,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			}
 		} else {
 			if c.showBytes {
-				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes, c.useIECUnits)
+				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
 				sb.WriteString(fmt.Sprintf("%s%s", currentHumanize, currentSuffix))
 			} else {
 				sb.WriteString(fmt.Sprintf("%.0f/%s", s.currentBytes, "-"))
@@ -779,7 +757,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		} else {
 			sb.WriteString(", ")
 		}
-		currentHumanize, currentSuffix := humanizeBytes(averageRate, c.useIECUnits)
+		currentHumanize, currentSuffix := humanizeBytes(averageRate)
 		sb.WriteString(fmt.Sprintf("%s%s/s", currentHumanize, currentSuffix))
 	}
 
@@ -1023,14 +1001,9 @@ func average(xs []float64) float64 {
 	return total / float64(len(xs))
 }
 
-func humanizeBytes(s float64, iec bool) (string, string) {
+func humanizeBytes(s float64) (string, string) {
 	sizes := []string{" B", " kB", " MB", " GB", " TB", " PB", " EB"}
 	base := 1000.0
-
-	if iec {
-		sizes = []string{" B", " KiB", " MiB", " GiB", " TiB", " PiB", " EiB"}
-		base = 1024.0
-	}
 
 	if s < 10 {
 		return fmt.Sprintf("%2.0f", s), sizes[0]
