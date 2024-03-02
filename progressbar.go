@@ -632,7 +632,7 @@ func (p *ProgressBar) render(now time.Time) error {
 // checkTrickyWidths checks if any progress bar element's width in screen characters
 // is different from the number of runes in it, and updates the relevant config variable.
 func (p *ProgressBar) checkTrickyWidths() {
-	var parts = []string{
+	parts := []string{
 		p.config.description,
 		p.config.iterationString,
 		p.config.theme.Saucer,

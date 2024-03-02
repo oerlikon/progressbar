@@ -437,7 +437,7 @@ func TestRenderBlankStateWithThrottle(t *testing.T) {
 }
 
 func TestOptionFullWidth(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		opts     []Option
 		expected string
 	}{
@@ -539,7 +539,8 @@ func TestOptionFullWidth(t *testing.T) {
 			bar := New(100, append(test.opts, []Option{
 				OptionFullWidth(),
 				OptionClock(func() time.Time { return clock }),
-				OptionWriter(&buf)}...)...)
+				OptionWriter(&buf),
+			}...)...)
 			clock = clock.Add(1 * time.Second)
 			bar.Add(10)
 			clock = clock.Add(1 * time.Second)
@@ -550,7 +551,7 @@ func TestOptionFullWidth(t *testing.T) {
 }
 
 func TestSpinners(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		opts     []Option
 		expected string
 	}{
@@ -626,7 +627,8 @@ func TestSpinners(t *testing.T) {
 			buf, clock := strings.Builder{}, time.Now()
 			spinner := New(-1, append(test.opts, []Option{
 				OptionClock(func() time.Time { return clock }),
-				OptionWriter(&buf)}...)...)
+				OptionWriter(&buf),
+			}...)...)
 			clock = clock.Add(950 * time.Millisecond)
 			spinner.Add(1)
 			clock = clock.Add(900 * time.Millisecond)
