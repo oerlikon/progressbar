@@ -20,6 +20,6 @@ jobs:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
       - run: go test -vet=off ./...
-      - uses: dominikh/staticcheck-action@v1.3.0
+      - uses: dominikh/staticcheck-action@v1.3.1
         with:
           install-go: false
