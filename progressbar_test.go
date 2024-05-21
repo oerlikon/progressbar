@@ -94,10 +94,12 @@ func ExampleOptionClearOnFinish() {
 }
 
 func ExampleProgressBar_Finish() {
-	bar := NewOptions(100, OptionSetWidth(10))
+	bar := NewOptions(100, OptionSetWidth(10), OptionShowCount(), OptionShowBytes(true), OptionShowIts())
+	bar.Reset()
+	time.Sleep(1 * time.Second)
 	bar.Finish()
 	// Output:
-	// 100% |██████████|
+	// 100% |██████████| (100/100 B, 100 B/s, 100 it/s)
 }
 
 func Example_xOutOfY() {
@@ -407,6 +409,37 @@ func TestOptionSetElapsedTime_spinner(t *testing.T) {
 	}
 }
 
+func TestOptionSetElapsedTime(t *testing.T) {
+	buf := strings.Builder{}
+	bar := NewOptions(
+		10,
+		OptionSetElapsedTime(false),
+		OptionSetPredictTime(false),
+		OptionSetWidth(10),
+		OptionSetWriter(&buf),
+	)
+
+	_ = bar.Add(2)
+	result := strings.TrimSpace(buf.String())
+	expect := "20% |██        |"
+
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+
+	bar.Reset()
+	bar.config.elapsedTime = true
+	buf.Reset()
+
+	_ = bar.Add(7)
+	result = strings.TrimSpace(buf.String())
+	expect = "70% |███████   |  [0s]"
+
+	if result != expect {
+		t.Errorf("Render miss-match\nResult: '%s'\nExpect: '%s'\n%+v", result, expect, bar)
+	}
+}
+
 func TestShowElapsedTimeOnFinish(t *testing.T) {
 	buf := strings.Builder{}
 	bar := NewOptions(10,
@@ -669,9 +702,9 @@ func TestOptionFullWidth(t *testing.T) {
 		{ // 4
 			[]Option{OptionSetPredictTime(false)},
 			"" +
-				"\r  10% |██████                                                          |  " +
-				"\r                                                                          \r" +
-				"\r 100% |████████████████████████████████████████████████████████████████|  ",
+				"\r  10% |██████                                                               |  " +
+				"\r                                                                               \r" +
+				"\r 100% |█████████████████████████████████████████████████████████████████████|  ",
 		},
 		{ // 5
 			[]Option{OptionSetPredictTime(false), OptionShowElapsedTimeOnFinish()},
@@ -718,9 +751,9 @@ func TestOptionFullWidth(t *testing.T) {
 		{ // 12
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false)},
 			"" +
-				"\r  10% |████                                           | (10/100, 10 it/s) " +
-				"\r                                                                          \r" +
-				"\r 100% |██████████████████████████████████████████████| (100/100, 50 it/s) ",
+				"\r  10% |█████                                               | (10/100, 10 it/s) " +
+				"\r                                                                               \r" +
+				"\r 100% |███████████████████████████████████████████████████| (100/100, 50 it/s) ",
 		},
 		{ // 13
 			[]Option{OptionShowIts(), OptionShowCount(), OptionSetPredictTime(false), OptionShowElapsedTimeOnFinish()},

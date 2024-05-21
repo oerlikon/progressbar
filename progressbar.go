@@ -287,7 +287,7 @@ func NewOptions64(max int64, options ...Option) *ProgressBar {
 			width:            40,
 			max:              max,
 			throttleDuration: 0 * time.Nanosecond,
-			elapsedTime:      true,
+			elapsedTime:      max == -1,
 			predictTime:      true,
 			spinnerType:      9,
 			invisible:        false,
@@ -457,10 +457,7 @@ func (p *ProgressBar) Reset() {
 
 // Finish will fill the bar to full
 func (p *ProgressBar) Finish() error {
-	p.lock.Lock()
-	p.state.currentNum = p.config.max
-	p.lock.Unlock()
-	return p.Add(0)
+	return p.Set64(p.config.max)
 }
 
 // Exit will exit the bar to keep current state
@@ -573,11 +570,17 @@ func New64(max int64) *ProgressBar {
 
 // GetMax returns the max of a bar
 func (p *ProgressBar) GetMax() int {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	return int(p.config.max)
 }
 
 // GetMax64 returns the current max
 func (p *ProgressBar) GetMax64() int64 {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	return p.config.max
 }
 
@@ -593,11 +596,15 @@ func (p *ProgressBar) ChangeMax(newMax int) {
 // but takes in a int64
 // to avoid casting
 func (p *ProgressBar) ChangeMax64(newMax int64) {
+	p.lock.Lock()
+
 	p.config.max = newMax
 
 	if p.config.showBytes {
 		p.config.maxHumanized, p.config.maxHumanizedSuffix = humanizeBytes(float64(p.config.max))
 	}
+
+	p.lock.Unlock() // so p.Add can lock
 
 	p.Add(0) // re-render
 }
@@ -791,7 +798,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 		}
 		rightBrac = rightBracNum.String()
 		fallthrough
-	case c.elapsedTime:
+	case c.elapsedTime || c.showElapsedTimeOnFinish:
 		leftBrac = (time.Duration(time.Since(s.startTime).Seconds()) * time.Second).String()
 	}
 
@@ -864,8 +871,7 @@ func renderProgressBar(c config, s *state) (int, error) {
 			strings.Repeat(c.theme.SaucerPadding, repeatAmount),
 			c.theme.BarEnd,
 			sb.String())
-
-		if s.currentPercent == 100 && c.showElapsedTimeOnFinish {
+		if (s.currentPercent == 100 && c.showElapsedTimeOnFinish) || c.elapsedTime {
 			str = fmt.Sprintf("%s [%s]", str, leftBrac)
 		}
 
