@@ -33,7 +33,6 @@ type State struct {
 	CurrentBytes   float64
 	SecondsSince   float64
 	SecondsLeft    float64
-	KBsPerSecond   float64
 }
 
 type state struct {
@@ -77,8 +76,8 @@ type config struct {
 	showBytes bool
 
 	// show the iterations per second
-	showIterationsPerSecond bool
-	showIterationsCount     bool
+	showIts   bool
+	showCount bool
 
 	// always display total rate
 	totalRate bool
@@ -217,14 +216,14 @@ func OptionShowRemaining() Option {
 // OptionShowCount enables display of current count out of total.
 func OptionShowCount() Option {
 	return func(p *ProgressBar) {
-		p.config.showIterationsCount = true
+		p.config.showCount = true
 	}
 }
 
 // OptionShowIts enables display of iterations/second.
 func OptionShowIts() Option {
 	return func(p *ProgressBar) {
-		p.config.showIterationsPerSecond = true
+		p.config.showIts = true
 	}
 }
 
@@ -312,7 +311,7 @@ func New64(max int64, options ...Option) *ProgressBar {
 	// ignoreLength if max bytes not known
 	if b.config.max == -1 {
 		b.config.ignoreLength = true
-		b.config.max = int64(b.config.width)
+		b.config.max = int64(len(spinners[b.config.spinnerType]))
 		b.config.predictTime = false
 	}
 
@@ -377,8 +376,8 @@ func (p *ProgressBar) Finish() error {
 	defer p.Unlock()
 
 	if !p.state.finished {
-		if p.state.currentNum < p.config.max {
-			p.state.currentNum = p.config.max
+		if !p.config.ignoreLength {
+			p.state.currentNum, p.state.currentBytes = p.config.max, float64(p.config.max)
 		}
 		p.state.finished = true
 
@@ -499,7 +498,7 @@ func (p *ProgressBar) add(delta int64) error {
 	p.state.lastPercent = p.state.currentPercent
 
 	// always update if show bytes/second or its/second
-	if updateBar || p.config.showIterationsPerSecond || p.config.showIterationsCount || delta == 0 {
+	if updateBar || p.config.showCount || p.config.showIts || p.config.showBytes || delta == 0 {
 		return p.render(now)
 	}
 
@@ -658,18 +657,13 @@ func (p *ProgressBar) State() State {
 	p.Lock()
 	defer p.Unlock()
 
-	currentNum, currentBytes, max := p.state.currentNum, p.state.currentBytes, p.config.max
-
 	s := State{
-		CurrentPercent: float64(currentNum) / float64(max),
-		CurrentBytes:   currentBytes,
-		SecondsSince:   p.config.now().Sub(p.state.startTime).Seconds(),
+		CurrentBytes: p.state.currentBytes,
+		SecondsSince: p.config.now().Sub(p.state.startTime).Seconds(),
 	}
-	if p.state.currentNum > 0 {
-		s.SecondsLeft = s.SecondsSince / float64(currentNum) * float64(max-currentNum)
-	}
-	if s.SecondsSince > 0 {
-		s.KBsPerSecond = float64(currentBytes) / 1000 / s.SecondsSince
+	if !p.config.ignoreLength && s.CurrentBytes > 0 {
+		s.CurrentPercent = s.CurrentBytes / float64(p.config.max)
+		s.SecondsLeft = s.SecondsSince / s.CurrentBytes * (float64(p.config.max) - s.CurrentBytes)
 	}
 	return s
 }
@@ -697,16 +691,15 @@ func renderProgressBar(c *config, s *state, now time.Time) (int, error) {
 	var sb strings.Builder
 
 	// show iteration count in "current/total" iterations format
-	if c.showIterationsCount {
-		if sb.Len() == 0 {
-			sb.WriteString("(")
-		} else {
-			sb.WriteString(", ")
-		}
+	if c.showCount {
+		sb.WriteString("(")
 		if !c.ignoreLength {
 			if c.showBytes {
-				currentHumanize, currentSuffix := humanizeBytes(s.currentBytes)
-				if currentSuffix == c.maxHumanizedSuffix {
+				currentHumanize, currentSuffix := "0", ""
+				if s.currentBytes > 0 {
+					currentHumanize, currentSuffix = humanizeBytes(s.currentBytes)
+				}
+				if currentSuffix == c.maxHumanizedSuffix || currentSuffix == "" {
 					sb.WriteString(fmt.Sprintf("%s/%s %s",
 						currentHumanize, c.maxHumanized, c.maxHumanizedSuffix))
 				} else {
@@ -750,7 +743,7 @@ func renderProgressBar(c *config, s *state, now time.Time) (int, error) {
 	}
 
 	// format rate as iterations per second/minute/hour
-	if c.showIterationsPerSecond {
+	if c.showIts {
 		if sb.Len() == 0 {
 			sb.WriteString("(")
 		} else {
@@ -992,12 +985,12 @@ func average(xx []float64) float64 {
 
 var sizes = []string{"B", "KB", "MB", "GB", "TB", "PB", "EB"}
 
-func humanizeBytes(s float64) (string, string) {
-	if s < 10 {
-		return fmt.Sprintf("%2.0f", s), sizes[0]
+func humanizeBytes(x float64) (string, string) {
+	if x < 10 {
+		return fmt.Sprintf("%.0f", x), sizes[0]
 	}
-	e := math.Floor(logn(s, 1000))
-	val, suffix := math.Floor(s/math.Pow(1000, e)*10+0.5)/10, sizes[int(e)]
+	e := math.Floor(logn(x, 1000))
+	val, suffix := math.Floor(x/math.Pow(1000, e)*10+0.5)/10, sizes[int(e)]
 	if val < 10 {
 		return fmt.Sprintf("%.1f", val), suffix
 	}
