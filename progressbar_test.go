@@ -45,6 +45,143 @@ func BenchmarkRenderTricky(b *testing.B) {
 	}
 }
 
+func TestDefaults(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(10)
+	expect := "" +
+		"  0% |                                        | " +
+		"\r                                                \r" +
+		" 10% |████                                    | "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionShowCount(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowCount(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(10)
+	expect := "" +
+		"  0% |          | (0/100) " +
+		"\r                          \r" +
+		" 10% |█         | (10/100) "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionShowIts(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowIts(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(10)
+	expect := "" +
+		"  0% |          | (0 it/s) " +
+		"\r                           \r" +
+		" 10% |█         | (10 it/s) "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionShowBytes(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowBytes(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Millisecond)
+	bar.Add(10)
+	expect := "" +
+		"  0% |          | " +
+		"\r                  \r" +
+		" 10% |█         | (10 KB/s) "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionShowCountWithIts(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowCount(),
+		OptionShowIts(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(10)
+	expect := "" +
+		"  0% |          | (0/100, 0 it/s) " +
+		"\r                                  \r" +
+		" 10% |█         | (10/100, 10 it/s) "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionShowCountWithBytes(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowCount(),
+		OptionShowBytes(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(10)
+	expect := "" +
+		"  0% |          | (0/100 B) " +
+		"\r                            \r" +
+		" 10% |█         | (10/100 B, 10 B/s) "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestOptionTotalRate(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100000000,
+		OptionWidth(10),
+		OptionShowCount(),
+		OptionShowBytes(),
+		OptionShowElapsed(),
+		OptionTotalRate(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(50000000)
+	clock = clock.Add(1 * time.Second)
+	bar.Set(10000000)
+	expect := "" +
+		"  0% |          | (0/100 MB) [0s] " +
+		"\r                                  \r" +
+		" 50% |█████     | (50/100 MB, 50 MB/s) [1s] " +
+		"\r                                            \r" +
+		" 10% |█         | (10/100 MB, 5.0 MB/s) [2s] "
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestFinish(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(100,
+		OptionWidth(10),
+		OptionShowCount(),
+		OptionShowBytes(),
+		OptionShowIts(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Millisecond)
+	bar.Finish()
+	expect := "" +
+		"  0% |          | (0/100 B, 0 it/s) " +
+		"\r                                    \r" +
+		"100% |██████████| (100/100 B, 100 KB/s, 100000 it/s) \n"
+	assert.Equal(t, expect, buf.String())
+}
+
 func TestBarSlowAdd(t *testing.T) {
 	buf, clock := strings.Builder{}, time.Now()
 	bar := New(100,
@@ -55,15 +192,9 @@ func TestBarSlowAdd(t *testing.T) {
 		OptionWriter(&buf))
 	clock = clock.Add(3 * time.Second)
 	bar.Add(1)
-	if !strings.Contains(buf.String(), "1%") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
-	if !strings.Contains(buf.String(), "20 it/min") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
-	if !strings.Contains(buf.String(), "[3s:") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
+	assert.Contains(t, buf.String(), "1%")
+	assert.Contains(t, buf.String(), "20 it/min")
+	assert.Contains(t, buf.String(), "[3s:")
 }
 
 func TestBarSmallBytes(t *testing.T) {
@@ -78,16 +209,12 @@ func TestBarSmallBytes(t *testing.T) {
 		clock = clock.Add(100 * time.Millisecond)
 		bar.Add(1000)
 	}
-	if !strings.Contains(buf.String(), "9.0 KB/100 MB") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
+	assert.Contains(t, buf.String(), "9.0 KB/100 MB")
 	for i := 1; i < 10; i++ {
 		clock = clock.Add(10 * time.Millisecond)
 		bar.Add(1000000)
 	}
-	if !strings.Contains(buf.String(), "9.0/100 MB") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
+	assert.Contains(t, buf.String(), "9.0/100 MB")
 }
 
 func TestBarFastBytes(t *testing.T) {
@@ -100,9 +227,7 @@ func TestBarFastBytes(t *testing.T) {
 		OptionWriter(&buf))
 	clock = clock.Add(time.Millisecond)
 	bar.Add(2e7)
-	if !strings.Contains(buf.String(), " GB/s)") {
-		t.Errorf("wrong string: %q", buf.String())
-	}
+	assert.Contains(t, buf.String(), " GB/s)")
 }
 
 func TestBar(t *testing.T) {
@@ -151,11 +276,7 @@ func TestOptionTheme(t *testing.T) {
 		OptionShowRemaining(),
 		OptionWriter(&buf))
 	bar.Add(5)
-	result := bar.String()
-	expect := " 50% >#####-----< [0s:0s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, " 50% >#####-----< [0s:0s] ", bar.String())
 }
 
 func TestElapsed(t *testing.T) {
@@ -165,11 +286,7 @@ func TestElapsed(t *testing.T) {
 		OptionShowElapsed(),
 		OptionWriter(&buf))
 	bar.Add(2)
-	result := bar.String()
-	expect := " 20% |██        | [0s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, " 20% |██        | [0s] ", bar.String())
 }
 
 func TestOptionElapsed_spinner(t *testing.T) {
@@ -182,11 +299,7 @@ func TestOptionElapsed_spinner(t *testing.T) {
 		OptionWriter(&buf))
 	clock = clock.Add(1 * time.Second)
 	bar.Add(5)
-	result := bar.String()
-	expect := " - (5/?, 5 it/s) [1s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, " - (5/?, 5 it/s) [1s] ", bar.String())
 }
 
 func TestEstimated(t *testing.T) {
@@ -196,11 +309,7 @@ func TestEstimated(t *testing.T) {
 		OptionShowRemaining(),
 		OptionWriter(&buf))
 	bar.Add(7)
-	result := bar.String()
-	expect := " 70% |███████   | [0s:0s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, " 70% |███████   | [0s:0s] ", bar.String())
 }
 
 func TestSpinnerState(t *testing.T) {
@@ -211,18 +320,10 @@ func TestSpinnerState(t *testing.T) {
 	clock = clock.Add(1 * time.Second)
 	bar.Add(10)
 
-	state := bar.State()
-	if state.CurrentBytes != 10.0 {
-		t.Errorf("Number of bytes mismatched gotBytes %f wantBytes %f", state.CurrentBytes, 10.0)
-	}
-	if state.CurrentPercent != 0.1 {
-		t.Errorf("Percent of bar mismatched got %f want %f", state.CurrentPercent, 0.1)
-	}
-
-	kbPerSec := fmt.Sprintf("%2.2f", state.KBsPerSecond)
-	if kbPerSec != "0.01" {
-		t.Errorf("Speed mismatched got %s want %s", kbPerSec, "0.01")
-	}
+	assert.Equal(t, State{
+		CurrentBytes: 10,
+		SecondsSince: 1,
+	}, bar.State())
 }
 
 func TestReaderToBuffer(t *testing.T) {
@@ -410,16 +511,13 @@ func TestSetDescription(t *testing.T) {
 	bar := New(100, OptionWidth(10), OptionShowRemaining(), OptionWriter(&buf))
 	bar.SetDescription("performing axial adjustments")
 	bar.Add(10)
-	result := buf.String()
 	expect := "" +
 		"  0% |          | [0s] " +
 		"\r                       \r" +
 		"performing axial adjustments   0% |          | [0s] " +
 		"\r                                                    \r" +
 		"performing axial adjustments  10% |█         | [0s:0s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, expect, buf.String())
 }
 
 func TestRenderBlankStateWithThrottle(t *testing.T) {
@@ -429,11 +527,7 @@ func TestRenderBlankStateWithThrottle(t *testing.T) {
 		OptionShowRemaining(),
 		OptionThrottle(time.Millisecond),
 		OptionWriter(&buf))
-	result := bar.String()
-	expect := "  0% |          | [0s] "
-	if result != expect {
-		t.Errorf("Render miss-match\nResult: %q\nExpect: %q", result, expect)
-	}
+	assert.Equal(t, "  0% |          | [0s] ", bar.String())
 }
 
 func TestOptionFullWidth(t *testing.T) {
