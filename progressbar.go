@@ -490,7 +490,10 @@ func (p *ProgressBar) add(delta int64) error {
 		}
 	}
 
-	percent := float64(p.state.currentNum) / float64(p.config.max)
+	percent := 0.0
+	if p.config.max > 0 {
+		percent = float64(p.state.currentNum) / float64(p.config.max)
+	}
 	p.state.currentSaucerSize = int(percent * float64(p.config.width))
 	p.state.currentPercent = int(percent * 100)
 	updateBar := p.state.currentPercent != p.state.lastPercent && p.state.currentPercent > 0
@@ -662,7 +665,10 @@ func (p *ProgressBar) State() State {
 		SecondsSince: p.config.now().Sub(p.state.startTime).Seconds(),
 	}
 	if !p.config.ignoreLength && s.CurrentBytes > 0 {
-		s.CurrentPercent = s.CurrentBytes / float64(p.config.max)
+		s.CurrentPercent = 0.0
+		if p.config.max > 0 {
+			s.CurrentPercent = s.CurrentBytes / float64(p.config.max)
+		}
 		s.SecondsLeft = s.SecondsSince / s.CurrentBytes * (float64(p.config.max) - s.CurrentBytes)
 	}
 	return s

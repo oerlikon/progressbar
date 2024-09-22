@@ -59,6 +59,43 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, expect, buf.String())
 }
 
+func TestZeroMax(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(0,
+		OptionShowElapsed(),
+		OptionShowIts(),
+		OptionShowCount(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(1)
+	clock = clock.Add(1 * time.Second)
+	bar.Finish()
+	expect := "  0% |                                        | (0/0, 0 it/s) [0s] \n"
+	assert.Equal(t, expect, buf.String())
+}
+
+func TestAddMax(t *testing.T) {
+	buf, clock := strings.Builder{}, time.Now()
+	bar := New(2,
+		OptionShowElapsed(),
+		OptionShowIts(),
+		OptionShowCount(),
+		OptionClock(func() time.Time { return clock }),
+		OptionWriter(&buf))
+	clock = clock.Add(1 * time.Second)
+	bar.Add(1)
+	clock = clock.Add(1 * time.Second)
+	bar.AddMax(-1)
+	expect := "" +
+		"  0% |                                        | (0/2, 0 it/s) [0s] " +
+		"\r                                                                   \r" +
+		" 50% |████████████████████                    | (1/2, 60 it/min) [1s] " +
+		"\r                                                                      \r" +
+		"100% |████████████████████████████████████████| (1/1, 30 it/min) [2s] "
+	assert.Equal(t, expect, buf.String())
+}
+
 func TestOptionShowCount(t *testing.T) {
 	buf, clock := strings.Builder{}, time.Now()
 	bar := New(100,
