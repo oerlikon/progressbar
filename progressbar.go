@@ -785,7 +785,7 @@ func renderProgressBar(c *config, s *state, now time.Time) (int, error) {
 	}
 
 	if c.fullWidth && !c.ignoreLength {
-		width, err := termWidth()
+		width, err := termWidth(c.writer)
 		if err != nil {
 			width = 80
 		}
@@ -1016,14 +1016,14 @@ func sp(s string, p bool) string {
 
 // termWidth function returns the visible width of the current terminal
 // and can be redefined for testing.
-var termWidth = func() (width int, err error) {
-	width, _, err = term.GetSize(int(os.Stdout.Fd()))
-	if err == nil {
-		return width, nil
-	}
-	width, _, err = term.GetSize(int(os.Stderr.Fd()))
-	if err == nil {
-		return width, nil
+var termWidth = func(w io.Writer) (width int, err error) {
+	if f, ok := w.(*os.File); ok {
+		width, _, err = term.GetSize(int(f.Fd()))
+		if err == nil {
+			return width, nil
+		}
+	} else {
+		err = os.ErrPermission
 	}
 	return 0, err
 }

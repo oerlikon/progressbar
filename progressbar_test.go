@@ -17,7 +17,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	termWidth = func() (int, error) {
+	termWidth = func(w io.Writer) (int, error) {
 		return 0, os.ErrPermission
 	}
 	os.Exit(m.Run())
