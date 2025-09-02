@@ -830,10 +830,7 @@ func renderProgressBar(c *config, s *state, now time.Time) (int, error) {
 		Description % |------        |  (KB/s) (iteration count) (iteration rate) (predict time)
 	*/
 
-	repeatAmount := c.width - s.currentSaucerSize
-	if repeatAmount < 0 {
-		repeatAmount = 0
-	}
+	repeatAmount := max(c.width-s.currentSaucerSize, 0)
 
 	str := ""
 

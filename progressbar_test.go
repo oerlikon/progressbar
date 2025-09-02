@@ -32,7 +32,7 @@ func OptionClock(clock func() time.Time) Option {
 func BenchmarkRenderSimple(b *testing.B) {
 	bar := New64(1e8, OptionWriter(io.Discard), OptionShowIts(),
 		OptionDescription("£"))
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bar.Add(1)
 	}
 }
@@ -40,7 +40,7 @@ func BenchmarkRenderSimple(b *testing.B) {
 func BenchmarkRenderTricky(b *testing.B) {
 	bar := New64(1e8, OptionWriter(io.Discard), OptionShowIts(),
 		OptionDescription("这是一个つの测试"))
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		bar.Add(1)
 	}
 }
@@ -498,7 +498,7 @@ func TestConcurrency(t *testing.T) {
 	buf := strings.Builder{}
 	bar := New(1000, OptionWriter(&buf))
 	var wg sync.WaitGroup
-	for i := 0; i < 900; i++ {
+	for range 900 {
 		wg.Add(1)
 		go func(b *ProgressBar, wg *sync.WaitGroup) {
 			bar.Add(1)
@@ -663,7 +663,6 @@ func TestOptionFullWidth(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		test := test
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
 			buf, clock := strings.Builder{}, time.Now()
@@ -752,7 +751,6 @@ func TestSpinners(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		test := test
 		t.Run(fmt.Sprintf("%d", i+1), func(t *testing.T) {
 			t.Parallel()
 			buf, clock := strings.Builder{}, time.Now()
