@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -907,6 +908,9 @@ func clearProgressBar(c *config, s *state) error {
 	if c.useANSICodes {
 		// write the "clear current line" ANSI escape sequence
 		return writeString(c, "\033[2K\r")
+	}
+	if runtime.GOOS == "windows" {
+		return writeString(c, "\r")
 	}
 	// overwrite the bar with spaces and return back to the beginning of the line
 	return writeString(c, "\r"+strings.Repeat(" ", s.maxLineWidth)+"\r")

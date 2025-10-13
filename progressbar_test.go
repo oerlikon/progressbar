@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -56,7 +58,7 @@ func TestDefaults(t *testing.T) {
 		"  0% |                                        | " +
 		"\r                                                \r" +
 		" 10% |████                                    | "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestZeroMax(t *testing.T) {
@@ -93,7 +95,7 @@ func TestAddMax(t *testing.T) {
 		" 50% |████████████████████                    | (1/2, 60 it/min) [1s] " +
 		"\r                                                                      \r" +
 		"100% |████████████████████████████████████████| (1/1, 30 it/min) [2s] "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionShowCount(t *testing.T) {
@@ -109,7 +111,7 @@ func TestOptionShowCount(t *testing.T) {
 		"  0% |          | (0/100) " +
 		"\r                          \r" +
 		" 10% |█         | (10/100) "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionShowIts(t *testing.T) {
@@ -125,7 +127,7 @@ func TestOptionShowIts(t *testing.T) {
 		"  0% |          | (0 it/s) " +
 		"\r                           \r" +
 		" 10% |█         | (10 it/s) "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionShowBytes(t *testing.T) {
@@ -141,7 +143,7 @@ func TestOptionShowBytes(t *testing.T) {
 		"  0% |          | " +
 		"\r                  \r" +
 		" 10% |█         | (10 KB/s) "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionShowCountWithIts(t *testing.T) {
@@ -158,7 +160,7 @@ func TestOptionShowCountWithIts(t *testing.T) {
 		"  0% |          | (0/100, 0 it/s) " +
 		"\r                                  \r" +
 		" 10% |█         | (10/100, 10 it/s) "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionShowCountWithBytes(t *testing.T) {
@@ -175,7 +177,7 @@ func TestOptionShowCountWithBytes(t *testing.T) {
 		"  0% |          | (0/100 B) " +
 		"\r                            \r" +
 		" 10% |█         | (10/100 B, 10 B/s) "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestOptionTotalRate(t *testing.T) {
@@ -198,7 +200,7 @@ func TestOptionTotalRate(t *testing.T) {
 		" 50% |█████     | (50/100 MB, 50 MB/s) [1s] " +
 		"\r                                            \r" +
 		" 10% |█         | (10/100 MB, 5.0 MB/s) [2s] "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestFinish(t *testing.T) {
@@ -216,7 +218,7 @@ func TestFinish(t *testing.T) {
 		"  0% |          | (0/100 B, 0 it/s) " +
 		"\r                                    \r" +
 		"100% |██████████| (100/100 B, 100 KB/s, 100000 it/s) \n"
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestBarSlowAdd(t *testing.T) {
@@ -554,7 +556,7 @@ func TestSetDescription(t *testing.T) {
 		"performing axial adjustments   0% |          | [0s] " +
 		"\r                                                    \r" +
 		"performing axial adjustments  10% |█         | [0s:0s] "
-	assert.Equal(t, expect, buf.String())
+	assert.Equal(t, co(expect), buf.String())
 }
 
 func TestRenderBlankStateWithThrottle(t *testing.T) {
@@ -675,7 +677,7 @@ func TestOptionFullWidth(t *testing.T) {
 			bar.Add(10)
 			clock = clock.Add(1 * time.Second)
 			bar.Add(90)
-			assert.Equal(t, test.expected, buf.String())
+			assert.Equal(t, co(test.expected), buf.String())
 		})
 	}
 }
@@ -762,7 +764,14 @@ func TestSpinners(t *testing.T) {
 			spinner.Add(1)
 			clock = clock.Add(900 * time.Millisecond)
 			spinner.Finish()
-			assert.Equal(t, test.expected, buf.String())
+			assert.Equal(t, co(test.expected), buf.String())
 		})
 	}
+}
+
+func co(s string) string {
+	if runtime.GOOS != "windows" {
+		return s
+	}
+	return regexp.MustCompile(`\r[ ]+\r`).ReplaceAllString(s, "\r")
 }
