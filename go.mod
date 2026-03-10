@@ -1,6 +1,6 @@
 module github.com/oerlikon/progressbar/v3
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
