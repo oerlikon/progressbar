@@ -5,12 +5,17 @@ on:
     branches: [sideline]
   pull_request:
     branches: [sideline]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  audit:
+  test:
     strategy:
+      fail-fast: false
       matrix:
-        go: [1.26.x]
+        go: [1.27.x]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -20,6 +25,15 @@ jobs:
           go-version: ${{ matrix.go }}
       - run: go vet ./...
       - run: go test -vet=off ./...
+
+  staticcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: 1.27.x
       - uses: dominikh/staticcheck-action@v1.4.1
         with:
+          version: "2026.2.2"
           install-go: false
